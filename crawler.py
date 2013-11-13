@@ -21,3 +21,14 @@ class ourCrawler:
         else:
             return(result)
 
+
+def extractLink(text):
+    linkPat = '''http://'''
+    lp = re.compile(linkpat)
+    st = p1re.search(text).start()
+    findSpace = re.compile(''' ''')
+    yesSpace = findspace.search(text[st:]+'')
+    if yesSpace:
+        return text[st:yesSpace.start()+st]
+    else:
+        return text[st:]
