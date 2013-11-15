@@ -4,105 +4,119 @@
 
 from __future__ import division
 
-import re
-import time
-import json,os,sys
+from copy import copy
 from cPickle import load,dump
-
-cwd = os.getcwd()
-dir = cwd+'/data/test'
-
-jsonsamp = '/tweets121120130845.json'
-
-fileList = [dir+jsonsamp]
-
+from itertools import islice
+import json
+import os
+import re
+from reporter import Reporter
+import sys
+import time
 
 def main():
     Cr = ourCrawler()
-    for f in fileList:
-        o = open(f)
-        tweets = json.load(o)
-        o.close()
-        Cr.crawl(tweets)
-                   
-            
+
+    ## Loop through files in our data_dir, crawling each data file
+    data_dir = 'data/test/'
+    for root, dirs, files in os.walk(data_dir):
+        for f in files:
+            if f.endswith('.json'):
+                o = open(data_dir + f)
+                tweets = json.load(o)
+                o.close()
+                Cr.crawl(tweets, f)
+
 class ourCrawler:
-    from reporter import Reporter
     r = Reporter()
-    
+
     def __init__(self):
         self.isCrawler = True
-       
-    def crawl(self,tweets):
-        noneList = []
-        moreList = []
-        otherProb = []
-        outDict = {}    
-        size = 0
-        i = 1
-        tweetCount = 1
-        t0 = time.time()
-        for t in tweets:
-            linktry = self.extractLink(t)
-            if linktry[1] == 'more':
-                moreList.append(t)
-            if linktry[1] == 'none':
-                noneList.append(t)
-            if linktry[1] == 'OK':
-                link = linktry[0]
-                sensFlag = t['possibly_sensitive']
-                time.sleep(.25)
-                try:
-                    linkText = self.fetchText(link)
-                    outDict[link] = [linkText,sensFlag]
-                except AttributeError:
-                    otherProb.append(t)
-            size = self.sizeChecker( (noneList,moreList,otherProb,outDict) )
-            t1 = time.time()
-            print('Tweet Count: '+str(tweetCount) + '\tFile Size: '+ str(size*(1/1048576)) + '\tFile Num: '+str(i)+ '\tTime: ' +str(t1-t0))
-            tweetCount +=1
-            if size >= 104857600:
-                self.outPutter( (i,{'noneList': noneList,'moreList':moreList,'otherProb':otherProb,'outDict':outDict}))
-                i += 1
-                noneList = []
-                moreList = []
-                otherProb = []
-                outDict = {}    
-                size = 0
-        self.outPutter((i,{'noneList': noneList,'moreList':moreList,'otherProb':otherProb,'outDict':outDict}))
-                        
 
-    def outPutter(self,(i,dict)):
-        for k in dict:
-            outName = dir+'/out/'+k+'_'+str(i)+'.pk1'
-            outFile = open(outName,'wb')
-            dump(dict[k],outFile)
-            outFile.close()    
-        
-        
+    def crawl(self, tweets, filename):
+
+        file_count = 1
+        t0 = time.time()
+        crawled_tweets = []
+
+        for t in islice(tweets,None): ## Use islice for testing
+            ## replace None with 5 to test
+
+            ## loop through extractLinks generator output
+            for link in self.extractLinks(t['text']):
+
+                try: ## try to follow the link
+                    url_visited, page_text = self.fetchText(link)
+                except Exception as e: ## if we get an error, save the link
+                    t['page_text'] = ''
+                    t['link_followed'] = link
+                    t['errors'] = e
+                    continue
+
+                ## Save crawl information
+                t['page_text'] = page_text
+                t['link_followed'] = link
+                t['link_actual'] = url_visited
+                t['errors'] = ''
+
+                crawled_tweets.append(t)
+
+                size = self.sizeChecker(crawled_tweets)
+
+                ## If file is over 10Mb output a chunk of the results
+                ## 100 Mb = 104857600
+                if size > 10485760:
+                    t1 = time.time()
+                    print('Tweet Count: '+str(len(crawled_tweets)) \
+                      + '\tFile Size: '+ str(size*(1/1048576)) \
+                      + '\tTime: ' +str(t1-t0))
+                    print 'saving output, reseting crawled_tweets'
+                    crawled_tweets = []
+                    self.saveCrawl(crawled_tweets, filename, file_count)
+                    file_count += 1
+
+        if len(crawled_tweets) > 0:
+            print 'finished ' + filename + 'saving last outfile' + str(file_count)
+            self.saveCrawl(crawled_tweets, filename, i)
+
+    def saveCrawl(self, tweets, filename, file_no):
+        """
+        Output crawled tweets to json
+        """
+        with open('crawled_'+filename+str(file_no), 'w') as outfile:
+            json.dump(tweets, outfile, indent=2)
+
     def sizeChecker(self,tuple):
         size = 0
         for it in tuple:
             size = size + sys.getsizeof(it)
         return(size)
-    
-    def fetchText(self,link,rep=r):
-        rep.read(url=link)
-        result = rep.report_news()
+
+    def fetchText(self,link):
+        self.r.read(url=link)
+        url, text = self.r.report_news()
         #r = r'{.*}'
+
+        ## Not sure if this regex is doing what we expect
         r = r'[_{}]'
         p = re.compile(r)
-        m = p.findall(result)
+        m = p.findall(text)
         if m:
-            return None
+            return url, None
         else:
-            return(result)
-            
-    def extractLink(self,tweet):
-        text = tweet['text']
+            return url, text
+
+    def extractLinks(self,text):
+
+        link_pattern = re.compile(r'(https?://[\w./]*\w{1})')
+        for link in link_pattern.findall(text):
+            yield link
+
+        """
         linkPat = '''http://'''
         lp = re.compile(linkPat)
         instances = lp.findall(text)
+        print 'links', instances
         if len(instances) > 1:
             print 'ALERT: MORE THAN ONE LINK FOUND'
             return( (text,'more') )
@@ -119,10 +133,7 @@ class ourCrawler:
             else:
                 link = text[st:]
                 return ( (link, 'OK') )
+        """
 
-
-        
-main()            
-
-
-            
+if __name__ == '__main__':
+    main()
