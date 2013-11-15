@@ -42,9 +42,9 @@ class ourCrawler:
         crawled_tweets = []
 
         print 'crawling', filename
-        pbar = ProgressBar(widgets=[Percentage(), Bar(), ETA()], maxval=len(tweets)).start()
+        #pbar = ProgressBar(widgets=[Percentage(), Bar(), ETA()], maxval=len(tweets)).start()
 
-        for t in islice(tweets,None): ## Use islice for testing
+        for t in islice(tweets,100): ## Use islice for testing
             ## replace None with 5 to test
 
             ## loop through extractLinks generator output
@@ -66,9 +66,16 @@ class ourCrawler:
 
                 crawled_tweets.append(t)
                 crawl_count += 1
-                pbar.update(crawl_count)
+                #pbar.update(crawl_count)
 
                 size = self.sizeChecker(crawled_tweets)
+
+                ## logging
+                if crawl_count % 100 == 0:
+                    t1 = time.time()
+                    print('Tweet Count: '+str(len(crawled_tweets)) \
+                      + '\tFile Size: '+ str(size*(1/1048576)) \
+                      + '\tTime: ' +str(t1-t0))
 
                 ## If file is over 10Mb output a chunk of the results
                 ## 100 Mb = 104857600
@@ -83,15 +90,15 @@ class ourCrawler:
                     file_count += 1
 
         if len(crawled_tweets) > 0:
-            pbar.finish()
+            #pbar.finish()
             print 'finished ' + filename + 'saving last outfile' + str(file_count)
-            self.saveCrawl(crawled_tweets, filename, i)
+            self.saveCrawl(crawled_tweets, filename, file_count)
 
     def saveCrawl(self, tweets, filename, file_no):
         """
         Output crawled tweets to json
         """
-        with open('crawled_'+filename+str(file_no), 'w') as outfile:
+        with open('crawled_'+str(file_no)+'_'+filename, 'w') as outfile:
             json.dump(tweets, outfile, indent=2)
 
     def sizeChecker(self,tuple):
