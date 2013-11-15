@@ -9,6 +9,7 @@ from cPickle import load,dump
 from itertools import islice
 import json
 import os
+from progressbar import ProgressBar, Percentage, Bar, ETA
 import re
 from reporter import Reporter
 import sys
@@ -37,7 +38,11 @@ class ourCrawler:
 
         file_count = 1
         t0 = time.time()
+        crawl_count = 0
         crawled_tweets = []
+
+        print 'crawling', filename
+        pbar = ProgressBar(widgets=[Percentage(), Bar(), ETA()], maxval=len(tweets)).start()
 
         for t in islice(tweets,None): ## Use islice for testing
             ## replace None with 5 to test
@@ -60,6 +65,8 @@ class ourCrawler:
                 t['errors'] = ''
 
                 crawled_tweets.append(t)
+                crawl_count += 1
+                pbar.update(crawl_count)
 
                 size = self.sizeChecker(crawled_tweets)
 
@@ -76,6 +83,7 @@ class ourCrawler:
                     file_count += 1
 
         if len(crawled_tweets) > 0:
+            pbar.finish()
             print 'finished ' + filename + 'saving last outfile' + str(file_count)
             self.saveCrawl(crawled_tweets, filename, i)
 
