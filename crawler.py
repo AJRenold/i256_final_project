@@ -8,12 +8,15 @@ from copy import copy
 from cPickle import load,dump
 from itertools import islice
 import json
+import logging
 import os
 from progressbar import ProgressBar, Percentage, Bar, ETA
 import re
 from reporter import Reporter
 import sys
 import time
+
+logging.basicConfig(filename='log_file.log',level=logging.WARNING, format='%(asctime)s %(message)s')
 
 def main():
     Cr = ourCrawler()
@@ -41,10 +44,11 @@ class ourCrawler:
         crawl_count = 0
         crawled_tweets = []
 
-        print 'crawling', filename
+        l = 'crawling', filename
+        logging.warning(l)
         #pbar = ProgressBar(widgets=[Percentage(), Bar(), ETA()], maxval=len(tweets)).start()
 
-        for t in islice(tweets,100): ## Use islice for testing
+        for t in islice(tweets,None): ## Use islice for testing
             ## replace None with 5 to test
 
             ## loop through extractLinks generator output
@@ -56,6 +60,9 @@ class ourCrawler:
                     t['page_text'] = ''
                     t['link_followed'] = link
                     t['errors'] = e
+                    l = str(e) + ' visiting ' + link
+                    logging.exception(e)
+                    logging.warning(l)
                     continue
 
                 ## Save crawl information
@@ -73,25 +80,29 @@ class ourCrawler:
                 ## logging
                 if crawl_count % 100 == 0:
                     t1 = time.time()
-                    print('Tweet Count: '+str(len(crawled_tweets)) \
+                    l = 'Tweet Count: '+str(len(crawled_tweets)) \
                       + '\tFile Size: '+ str(size*(1/1048576)) \
-                      + '\tTime: ' +str(t1-t0))
+                      + '\tTime: ' +str(t1-t0)
+                    logging.warning(l)
 
                 ## If file is over 10Mb output a chunk of the results
                 ## 100 Mb = 104857600
                 if size > 10485760:
                     t1 = time.time()
-                    print('Tweet Count: '+str(len(crawled_tweets)) \
+                    l = 'Tweet Count: '+str(len(crawled_tweets)) \
                       + '\tFile Size: '+ str(size*(1/1048576)) \
-                      + '\tTime: ' +str(t1-t0))
-                    print 'saving output, reseting crawled_tweets'
+                      + '\tTime: ' +str(t1-t0)
+                    logging.warning(l)
+                    l = 'saving output, reseting crawled_tweets'
+                    logging.warning(l)
                     crawled_tweets = []
                     self.saveCrawl(crawled_tweets, filename, file_count)
                     file_count += 1
 
         if len(crawled_tweets) > 0:
             #pbar.finish()
-            print 'finished ' + filename + 'saving last outfile' + str(file_count)
+            l = 'finished ' + filename + 'saving last outfile ' + str(file_count)
+            logging.warning(l)
             self.saveCrawl(crawled_tweets, filename, file_count)
 
     def saveCrawl(self, tweets, filename, file_no):
@@ -125,7 +136,12 @@ class ourCrawler:
 
         link_pattern = re.compile(r'(https?://[\w./]*\w{1})')
         for link in link_pattern.findall(text):
-            yield link
+            if '//' in link:
+                if len(link[link.find('//')+2:]) > 5:
+                    yield link
+            else:
+                l = 'not crawling ' + link
+                logging.warning(l)
 
         """
         linkPat = '''http://'''
