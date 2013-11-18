@@ -9,27 +9,111 @@ from cPickle import load,dump
 from itertools import islice
 import json
 import logging
+import MySQLdb as mdb
 import os
 from progressbar import ProgressBar, Percentage, Bar, ETA
 import re
 from reporter import Reporter
+from settings import mysql_pass
 import sys
 import time
 
 logging.basicConfig(filename='log_file.log',level=logging.WARNING, format='%(asctime)s %(message)s')
 
 def main():
-    Cr = ourCrawler()
+    r = Reporter()
 
-    ## Loop through files in our data_dir, crawling each data file
-    data_dir = 'data/test/'
-    for root, dirs, files in os.walk(data_dir):
-        for f in files:
-            if f.endswith('.json'):
-                o = open(data_dir + f)
-                tweets = json.load(o)
-                o.close()
-                Cr.crawl(tweets, f)
+    try:
+        con = mdb.connect('localhost', 'arenold', mysql_pass, 'arenold')
+        con.set_character_set('utf8')
+        logging.warning('Established db con')
+    except Exception as e:
+        logging.warning('Failed to get db con')
+        logging.exception(e)
+
+    count = 1
+
+    logging.warning('Crawling . . .')
+    while count > 0:
+        with con:
+            cur = con.cursor(mdb.cursors.DictCursor)
+            cur.execute('SELECT count(id) as count from tweets where crawled=0;')
+            count = cur.fetchall()
+
+        with con:
+            cur = con.cursor(mdb.cursors.DictCursor)
+            cur.execute('SET NAMES utf8;')
+            cur.execute('SET CHARACTER SET utf8;')
+            cur.execute('SET character_set_connection=utf8;')
+
+            cur.execute('SELECT id, link FROM tweets where crawled=0;')
+            for result in islice(cur.fetchall(),100):
+                last = result['id']
+                try:
+                    url_visited, page_text = fetchText(result['link'], r)
+                except Exception as e:
+                    logging.warning(str(result['id']) +' visiting '+result['link'])
+                    logging.exception(e)
+                    result['errors'] = 'error visiting'
+                    result['page_text'] = 'None'
+                    result['link_actual'] = 'None'
+
+                if 'errors' not in result:
+                    if page_text:
+                        result['page_text'] = unicode(con.escape_string(page_text.encode('utf8')), encoding='utf-8')
+                    else:
+                        result['page_text'] = 'None'
+                    result['link_actual'] = url_visited
+                    result['errors'] = 'None'
+
+                update = u"UPDATE tweets SET page_text='{page_text}', errors='{errors}',\
+    link_actual='{link_actual}', crawled=True WHERE id={id};"
+
+                cmd = update.format(**result)
+                try:
+                    cur.execute(cmd)
+                except Exception as e:
+                    logging.warning(str(result['id']) + ' failed mysql update')
+                    logging.exception(e)
+
+            con.commit()
+
+        logging.warning('end of last 100: '+str(last))
+
+def crawl():
+    ## loop through extractLinks generator output
+    for link in self.extractLinks(t['text']):
+
+        try: ## try to follow the link
+            url_visited, page_text = self.fetchText(link)
+        except Exception as e: ## if we get an error, save the link
+            t['page_text'] = ''
+            t['link_followed'] = link
+            t['errors'] = e
+            l = str(e) + ' visiting ' + link
+            logging.exception(e)
+            logging.warning(l)
+            continue
+
+        ## Save crawl information
+        t['page_text'] = page_text
+        t['link_followed'] = link
+        t['link_actual'] = url_visited
+        t['errors'] = ''
+
+def fetchText(link, reporter):
+    reporter.read(url=link)
+    url, text = reporter.report_news()
+    #r = r'{.*}'
+
+    ## Not sure if this regex is doing what we expect
+    r = r'[_{}]'
+    p = re.compile(r)
+    m = p.findall(text)
+    if m:
+        return url, None
+    else:
+        return url, text
 
 class ourCrawler:
     r = Reporter()
