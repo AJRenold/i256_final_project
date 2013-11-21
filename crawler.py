@@ -44,7 +44,7 @@ class ourCrawler:
         print 'crawling', filename
         #pbar = ProgressBar(widgets=[Percentage(), Bar(), ETA()], maxval=len(tweets)).start()
 
-        for t in islice(tweets,100): ## Use islice for testing
+        for t in islice(tweets,None): ## Use islice for testing
             ## replace None with 5 to test
 
             ## loop through extractLinks generator output
