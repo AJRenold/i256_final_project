@@ -2,23 +2,34 @@
 from bs4 import BeautifulSoup
 import csv
 import datetime
+import logging
+import MySQLdb as mdb
 import os
 import requests
 from reporter import Reporter
 from settings import mysql_pass, parser_token
 import time
 
+logging.basicConfig(filename='log_file21112013.log',level=logging.WARNING, format='%(asctime)s %(message)s')
+
 ## We should switch from a file to a list of RSS feeds
 xmlFile ='nsfw.xml'
 
 def main():
+
+    try:
+        con = mdb.connect('localhost', 'arenold', mysql_pass, 'arenold')
+        con.set_character_set('utf8')
+        logging.warning('Established db con')
+    except Exception as e:
+        logging.warning('Failed to get db con')
+        logging.exception(e)
+
     rsp = rssProcessor()
     outDict = rsp.process(xmlFile)
-    rsp.writeFile(outDict,xmlFile)
-    outDict = rsp.getDatabaseStatus(outDict)
+    outDict = rsp.getDatabaseStatus(outDict, con)
     outDict = rsp.addCrawlData(outDict)
-
-    print outDict.values()[0]
+    rsp.updateDatabase(outDict, con)
 
 class rssProcessor:
 
@@ -40,19 +51,28 @@ class rssProcessor:
             for m in medList:
                 if m.string == 'adult':
                     flag = 1
-            outDict[hash(link)] = { 'link': link, 'flag': flag, 'dbstatus': False }
+            outDict[str(hash(link))] = { 'link': link, 'flag': flag,
+                                        'inDB': False, 'id': str(hash(link)) }
         return outDict
 
-    def getDatabaseStatus(self, outDict):
-        for key, value in outDict.iteritems():
-            print key
+    def getDatabaseStatus(self, outDict, con):
+        with con:
+            cur = con.cursor(mdb.cursors.DictCursor)
+            for key, value in outDict.iteritems():
+                cur.execute('SELECT count(id) as count FROM RSS WHERE id={};'.format(key))
+                count = cur.fetchall()[0]['count']
+                if count == 1:
+                    logging.warning('in db ' + key)
+                    value['inDB'] = True
+
+            con.commit()
 
         return outDict
 
     def addCrawlData(self, outDict):
         reporter = Reporter()
         for key, value in outDict.iteritems():
-            if value['dbstatus'] == False:
+            if value['inDB'] == False:
                 api_params = { 'link': value['link'],
                     'token': self.parser_token
                     }
@@ -68,8 +88,48 @@ class rssProcessor:
 
         return outDict
 
-    def updateDatabase(self, outDict):
-        pass
+    def updateDatabase(self, outDict, con):
+        insert = u"INSERT INTO RSS(id, link, title, parser_content, reporter_content, sensitive_flag) \
+                values('{id}', '{link}', '{title}', '{content}', '{reporter_content}', '{flag}');"
+
+        with con:
+            cur = con.cursor(mdb.cursors.DictCursor)
+            cur.execute('SET NAMES utf8;')
+            cur.execute('SET CHARACTER SET utf8;')
+            cur.execute('SET character_set_connection=utf8;')
+
+            for value in outDict.values():
+                if value['inDB'] == False:
+
+                    value['link'] = unicode(con.escape_string(value['link']
+                            .encode('utf8')), encoding='utf-8')
+
+                    if 'title' not in value:
+                        value['title'] = u'None'
+                    else:
+                        value['title'] = unicode(con.escape_string(value['title']
+                            .encode('utf8')), encoding='utf-8')
+
+                    if 'content' not in value:
+                        value['content'] = u'None'
+                        value['reporter_content'] = u'None'
+                    else:
+                        value['content'] = unicode(con.escape_string(value['content']
+                            .encode('utf8')), encoding='utf-8')
+
+                        value['reporter_content'] = unicode(con.escape_string(value['reporter_content']
+                            .encode('utf8')), encoding='utf-8')
+
+                    cmd = insert.format(**value)
+                    try:
+                        cur.execute(cmd)
+                    except Exception as e:
+                        logging.warning(str(value['id']) + ' failed mysql update')
+                        logging.exception(e)
+
+            con.commit()
+
+
 
     def writeFile(self, outDict, xmlFile):
         ts = time.time()
@@ -82,11 +142,6 @@ class rssProcessor:
             for k in outDict:
                 writer.writerow((k,outDict[k]))
         csvfile.close()
-
-
-main()
-
-
 
 if __name__ == '__main__':
     main()
