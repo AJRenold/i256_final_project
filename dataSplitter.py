@@ -15,7 +15,11 @@ import pandas as pd
 
 
 def main():
-    rawDat = pd.read_csv(sys.argv[1])
+    try:
+        rawDat = pd.read_csv(sys.argv[1])
+    except IndexError:
+        print "\nAt the moment, this script needs a command line argument which is the name of the csv file you want to split\n"
+        sys.exit()
     ds = dataSplitter()
     valDat = ds.validate(rawDat)
     splitDat = ds.split(valDat)
