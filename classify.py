@@ -12,14 +12,15 @@
 
 '''
 
-from datetime import datetime
+import os
+import datetime
+import time
 import numpy as np
 import pylab as pl
+import pandas as pd
 from sklearn import linear_model
 
 from sklearn.feature_extraction.text import CountVectorizer
-
-from reporter import Reporter
 
 #Dummy code
 r = Reporter()
@@ -36,4 +37,25 @@ t = zip(cv.get_feature_names(),
     np.asarray(cvfit.sum(axis=0)).ravel())
 sort =  sorted(t, key=lambda a: -a[1])
 sgdClas = linear_model.SGDClassifier(loss='log',penalty='elasticnet')
+
+def fetchData(type,getLatest=True,timestamp=''):
+    if getLatest == True:
+        cwd = os.getcwd()
+        dirtoWalk = cwd + '/data/' + type
+        files = os.listdir(dirtoWalk)
+        try:
+            files.remove('.DS_Store')
+        except ValueError:
+            pass          
+        timeList= []
+        for i in range(len(files)):
+            f = files[i]
+            stampstr = f.split('@')[1].split('.')[0]
+            ts = time.strptime(stampstr, "%m-%d-%Y_%H-%M")
+            sec = time.mktime(ts)
+            timeList.append(sec)
+        latestTs = timeList.index(max(timeList))
+        latestFi = files[latestTs]
+        data = pd.read_csv(dirtoWalk + '/' +latestFi)
+        return data
 

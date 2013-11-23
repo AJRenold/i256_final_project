@@ -36,7 +36,8 @@ class dataSplitter:
                 probList.append(i)
             else:
                 keepList.append(i)
-        print("Problem with 'reporter_content' cell in following rows: " + ''.join(str(probList)))
+        if len(probList) > 0:
+            print "\nATTENTION: Problem with 'reporter_content' cell in following rows: " + ''.join(str(probList)) + '\n'
         return(df.ix[keepList])
     
     def split(self,df):
@@ -52,9 +53,9 @@ class dataSplitter:
         
     def write(self,prefix,df):
         ts = time.time()
-        st = datetime.datetime.fromtimestamp(ts).strftime('%m-%d-%Y_%H_%M')
+        st = datetime.datetime.fromtimestamp(ts).strftime('%m-%d-%Y_%H-%M')
         cwd = os.getcwd()
-        outFile = cwd + '/data/' + prefix + '/' + prefix + '_'+st+'.csv'
+        outFile = cwd + '/data/' + prefix + '/' + prefix + '_@'+st+'.csv'
         df.to_csv(outFile)
         print prefix + ' data successfully written ' + st
         
