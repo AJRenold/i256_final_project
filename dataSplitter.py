@@ -32,13 +32,20 @@ class dataSplitter:
         keepList = []
         for i in range(len(series)):
             ent = series[i]
+           # print ent
             if isinstance(ent, float) == True:
-                probList.append(i)
+                probList.append(df['id'][i])
+            elif ent == 'None':
+                probList.append(df['id'][i])
             else:
                 keepList.append(i)
         if len(probList) > 0:
-            print "\nATTENTION: Problem with 'reporter_content' cell in following rows: " + ''.join(str(probList)) + '\n'
-        return(df.ix[keepList])
+            print "\nATTENTION: Problem with 'reporter_content' cell in rows with following id's: "
+            for p in probList:
+                print str(p)
+            print('*'*40)
+        valid = df.ix[keepList]
+        return(valid.reset_index(drop=True))
     
     def split(self,df):
         lenDat = len(df)
@@ -58,7 +65,6 @@ class dataSplitter:
         outFile = cwd + '/data/' + prefix + '/' + prefix + '_@'+st+'.csv'
         df.to_csv(outFile)
         print prefix + ' data successfully written ' + st
-        
 
         
 if __name__ == '__main__':
