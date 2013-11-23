@@ -51,6 +51,7 @@ class Model:
             dirtoWalk = cwd + '/data/' + type
             files = os.listdir(dirtoWalk)
             try:
+            	files.remove('.placeholder')
                 files.remove('.DS_Store')
             except ValueError:
                 pass          
