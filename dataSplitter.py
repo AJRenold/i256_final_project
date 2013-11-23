@@ -8,6 +8,7 @@
 import datetime
 import time
 import math
+import random
 import os
 import sys
 import pandas as pd
@@ -39,7 +40,7 @@ class dataSplitter:
         return(df.ix[keepList])
     
     def split(self,df):
-        lenDat = len(data)
+        lenDat = len(df)
         s = list(range(lenDat))
         random.shuffle(s)
         spl = int(math.floor(.75*lenDat))
