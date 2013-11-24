@@ -166,6 +166,3 @@ class rssProcessor:
 
 if __name__ == '__main__':
     main()
-
-
-rsp = rssProcessor()
