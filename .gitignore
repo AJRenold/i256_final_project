@@ -2,3 +2,7 @@ venv/*
 .DS_Store
 data/.DS_Store
 data/test/.DS_Store
+data/test/*
+data/train/*
+dataSplitter.pyc
+dgNotebook.ipynb

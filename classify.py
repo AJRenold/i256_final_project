@@ -42,6 +42,7 @@ class Model:
             t = zip(self.CV.get_feature_names(),
             np.asarray(self.X_train.sum(axis=0)).ravel())
             self.freqDist =  sorted(t, key=lambda a: -a[1])
+            self.feature_names = np.asarray(self.CV.get_feature_names())
                                 
     
     
@@ -51,8 +52,8 @@ class Model:
             dirtoWalk = cwd + '/data/' + type
             files = os.listdir(dirtoWalk)
             try:
-            	files.remove('.placeholder')
                 files.remove('.DS_Store')
+                files.remove('.placeholder')
             except ValueError:
                 pass          
             timeList= []
@@ -91,14 +92,16 @@ def benchmark(clf,Model):
     if hasattr(clf, 'coef_'):
         print("dimensionality: %d" % clf.coef_.shape[1])
         print("density: %f" % density(clf.coef_))
-        '''
-        if opts.print_top10 and feature_names is not None:
-            print("top 10 keywords per class:")
-            for i, category in enumerate(categories):
-                top10 = np.argsort(clf.coef_[i])[-10:]
-                print(trim("%s: %s"
-                      % (category, " ".join(feature_names[top10]))))
-        print()
+        
+        #if opts.print_top10 and feature_names is not None:
+        if Model.feature_names is not None:
+            print("Top 10 tokens:")
+            #for i, category in enumerate(categories):
+            #   top10 = np.argsort(clf.coef_[i])[-10:]
+            top10 = np.argsort(clf.coef_[0])[-10:]
+            print(trim("%s"
+                      % (" ".join(Model.feature_names[top10]))))
+        '''print()
 
     if opts.print_report:
         print("classification report:")
@@ -115,13 +118,11 @@ def benchmark(clf,Model):
     
 
 
+def trim(s):
+    """Trim string to fit on terminal (assuming 80-column display)"""
+    return s if len(s) <= 80 else s[:77] + "..."
+
         
 if __name__ == '__main__':
-    main()
-            
-            
-            
-    
-    
-    
+   main()
 

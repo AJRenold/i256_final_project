@@ -9,11 +9,16 @@ import requests
 from reporter import Reporter
 from settings import mysql_pass, parser_token
 import time
+from urllib2 import Request, urlopen, URLError, HTTPError
 
 logging.basicConfig(filename='log_file21112013.log',level=logging.WARNING, format='%(asctime)s %(message)s')
 
-## We should switch from a file to a list of RSS feeds
-xmlFile ='nsfw.xml'
+## We should switch from a file to a list of RSS feeds. DONE.
+xmlFeeds = ["index","community/justlaunched","animals","celeb","entertainment","food","tech",\
+            "lgbt","music","politics","rewind","sports","lol","win","omg","cute","geeky","trashy",\
+            "fail","wtf","badge/gold-star","badge/collection","badge/time-waster","ew","lists","nsfw",\
+            "category/culture","category/movie","category/music","category/tv","category/celebrity",
+            "category/style","category/food","category/business","category/science"]
 
 def main():
 
@@ -26,10 +31,11 @@ def main():
         logging.exception(e)
 
     rsp = rssProcessor()
-    outDict = rsp.process(xmlFile)
-    outDict = rsp.getDatabaseStatus(outDict, con)
-    outDict = rsp.addCrawlData(outDict)
-    rsp.updateDatabase(outDict, con)
+    for f in xmlFeeds:
+        outDict = rsp.process(f)
+        outDict = rsp.getDatabaseStatus(outDict, con)
+        outDict = rsp.addCrawlData(outDict)
+        rsp.updateDatabase(outDict, con)
 
 class rssProcessor:
 
@@ -38,10 +44,9 @@ class rssProcessor:
         self.parser_token = parser_token
         self.parser_api = 'http://www.readability.com/api/content/v1/parser?url={link}&token={token}'
 
-    def process(self,xmlFile):
-        cwd = os.getcwd()
-        xmlLoc = cwd+'/data/test/buzzLinkRSS/'+xmlFile
-        soup = BeautifulSoup(open(xmlLoc),["lxml", "xml"])
+    def process(self,xmlFeed):
+        xmlCont = self.fetchFeed(xmlFeed)
+        soup = BeautifulSoup(xmlCont,["lxml", "xml"])
         outDict = {}
         items = soup.findAll('item')
         for i in items:
@@ -54,6 +59,22 @@ class rssProcessor:
             outDict[str(hash(link))] = { 'link': link, 'flag': flag,
                                         'inDB': False, 'id': str(hash(link)) }
         return outDict
+    
+    def fetchFeed(self,xmlFeed):
+        url = 'http://www.buzzfeed.com/'+xmlFeed+'.xml'
+        req = Request(url)
+        try:
+            response = urlopen(req)
+            return(response.read())
+        except HTTPError as e:
+            print 'The server couldn\'t fulfill the request.'
+            print 'Error code: ', e.code
+        except URLError as e:
+            print 'We failed to reach a server.'
+            print 'Reason: ', e.reason
+        else:
+            pass
+            # everything is fine
 
     def getDatabaseStatus(self, outDict, con):
         with con:
@@ -145,3 +166,6 @@ class rssProcessor:
 
 if __name__ == '__main__':
     main()
+
+
+rsp = rssProcessor()
