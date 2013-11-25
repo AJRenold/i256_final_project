@@ -32,10 +32,13 @@ def main():
 
     rsp = rssProcessor()
     for f in xmlFeeds:
+        logging.warning('fetching feed ' + f)
         outDict = rsp.process(f)
         outDict = rsp.getDatabaseStatus(outDict, con)
         outDict = rsp.addCrawlData(outDict)
         rsp.updateDatabase(outDict, con)
+        logging.warning('finished feed '+ f)
+
 
 class rssProcessor:
 
@@ -83,7 +86,7 @@ class rssProcessor:
                 cur.execute('SELECT count(id) as count FROM RSS WHERE id={};'.format(key))
                 count = cur.fetchall()[0]['count']
                 if count == 1:
-                    logging.warning('in db ' + key)
+                    logging.warning('in db ' + key + ' ' + value['link'])
                     value['inDB'] = True
 
             con.commit()
