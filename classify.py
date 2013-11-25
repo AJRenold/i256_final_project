@@ -101,13 +101,13 @@ def benchmark(clf,Model):
             top10 = np.argsort(clf.coef_[0])[-10:]
             print(trim("%s"
                       % (" ".join(Model.feature_names[top10]))))
-        '''print()
+        print""
 
-    if opts.print_report:
+    #if opts.print_report:
         print("classification report:")
-        print(metrics.classification_report(y_test, pred,
-                                            target_names=categories))
-
+        print(metrics.classification_report(Model.y_test, pred))
+        #                                    target_names=categories))
+    '''
     if opts.print_cm:
         print("confusion matrix:")
         print(metrics.confusion_matrix(y_test, pred))
