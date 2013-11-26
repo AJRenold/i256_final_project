@@ -5,9 +5,13 @@
 import os
 import datetime
 import time
+import sys
 import numpy as np
 import pylab as pl
 import pandas as pd
+import DataPuller as DataPuller
+
+from cPickle import load,dump
 from sklearn import linear_model
 from sklearn import metrics
 from sklearn.utils.extmath import density
@@ -30,43 +34,60 @@ class Model:
             self.buildBasic()
         
     def buildBasic(self):
-            train = self.fetchData('train')
-            test = self.fetchData('test')
-            articleStrs_tr = train['reporter_content'].tolist()
-            articleStrs_te = test['reporter_content'].tolist()
-            self.CV = CountVectorizer()
-            self.X_train = self.CV.fit_transform(articleStrs_tr)
-            self.X_test = self.CV.transform(articleStrs_te)
-            self.y_train = train['sensitive_flag'].tolist()
-            self.y_test = test['sensitive_flag'].tolist()
-            t = zip(self.CV.get_feature_names(),
-            np.asarray(self.X_train.sum(axis=0)).ravel())
-            self.freqDist =  sorted(t, key=lambda a: -a[1])
-            self.feature_names = np.asarray(self.CV.get_feature_names())
+        tr_ind = self.getSetIndices('train')
+        te_ind = self.getSetIndices('test')
+        dp = DataPuller.DataPuller()
+        rawdf = dp.fetchData()
+        valList = dp.validate(rawdf,runReport=False)
+        df = rawdf.ix[valList]
+        self.sqlChecker(df,tr_ind,te_ind)
+        self.train_df = df.ix[tr_ind]
+        self.test_df = df.ix[te_ind]
+        articleStrs_tr = self.train_df['reporter_content'].tolist()
+        articleStrs_te = self.test_df['reporter_content'].tolist()
+        self.CV = CountVectorizer()
+        self.X_train = self.CV.fit_transform(articleStrs_tr)
+        self.X_test = self.CV.transform(articleStrs_te)
+        self.y_train = self.train_df['sensitive_flag'].tolist()
+        self.y_test = self.test_df['sensitive_flag'].tolist()
+        t = zip(self.CV.get_feature_names(),
+        np.asarray(self.X_train.sum(axis=0)).ravel())
+        self.freqDist =  sorted(t, key=lambda a: -a[1])
+        self.feature_names = np.asarray(self.CV.get_feature_names())
                                 
+    def sqlChecker(self,df,pull_tr,pull_te):
+        valrecs = len(df)
+        #print 'valrecs: ' + str(valrecs)
+        pickrecs = len(pull_tr) + len(pull_te)
+        #print 'pickrecs: ' + str(pickrecs)
+        if valrecs != pickrecs:
+            print "The Database has been updated since your last pull. Do a git pull to get most recent version"
+            sys.exit()
     
-    
-    def fetchData(self,type,getLatest=True,timestamp=''):
+    def getSetIndices(self,type,getLatest=True,timestamp=''):
         if getLatest == True:
             cwd = os.getcwd()
             dirtoWalk = cwd + '/data/' + type
             files = os.listdir(dirtoWalk)
             try:
-                files.remove('.DS_Store')
                 files.remove('.placeholder')
+                files.remove('.DS_Store')                
             except ValueError:
                 pass          
             timeList= []
             for i in range(len(files)):
                 f = files[i]
+                #print f
                 stampstr = f.split('@')[1].split('.')[0]
                 ts = time.strptime(stampstr, "%m-%d-%Y_%H-%M")
                 sec = time.mktime(ts)
                 timeList.append(sec)
             latestTs = timeList.index(max(timeList))
             latestFi = files[latestTs]
-            data = pd.read_csv(dirtoWalk + '/' +latestFi)
-            return data
+            #data = pd.read_csv(dirtoWalk + '/' +latestFi)
+            oP = open(dirtoWalk+'/'+latestFi,'r')
+            indices = load(oP)
+            return indices
             
 
 
@@ -125,4 +146,3 @@ def trim(s):
         
 if __name__ == '__main__':
    main()
-
