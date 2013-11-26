@@ -1,10 +1,5 @@
 #!/usr/bin/python
 
-'''Accepts file name of csv document command line argument, 
-   outputs training and test sets into data directory with 
-   time stamp'''
-
-
 import datetime
 import time
 import math
@@ -16,7 +11,7 @@ import pandas as pd
 
 #testingDat = '/Users/dgreis/Documents/School/Classes/INFO_256/Outbrain/i256_final_project/data/forTesting/buzzLinkTest/RSS.csv'
 
-def main():
+'''def main():
     try:
         rawDat = pd.read_csv(sys.argv[1])
         #rawDat = pd.read_csv(testingDat)
@@ -27,41 +22,18 @@ def main():
     valList = ds.validate(rawDat)
     splitDict = ds.split(valList)
     for n in ['train','test']:
-        ds.write(n,splitDict)
+        ds.write(n,splitDict)'''
 
 
 class dataSplitter:
 
-    def validate(self,df):
-        series = df['reporter_content']
-        probList = []
-        keepList = []
-        for i in range(len(series)):
-            ent = series[i]
-           # print ent
-            if isinstance(ent, float) == True:
-                probList.append(df['id'][i])
-            elif ent == 'None':
-                probList.append(df['id'][i])
-            else:
-                keepList.append(i)
-        if len(probList) > 0:
-            print "\nATTENTION: Problem with 'reporter_content' cell in rows with following id's: "
-            for p in probList:
-                print str(p)
-            print('*'*40)
-        #valid = df.ix[keepList]
-        #return(valid.reset_index(drop=True))
-        return keepList
-    
-    
     def split(self,keepList):
         lenDat = len(keepList)
         s = list(range(lenDat))
         random.shuffle(s)
         spl = int(math.floor(.75*lenDat))
         randInd_tr = s[0:spl]
-        randInd_te = s[spl+1:]
+        randInd_te = s[spl:]
         #tr = df.ix[tr_ind]
         #te = df.ix[te_ind]
         tr = [keepList[i] for i in randInd_tr]
@@ -86,5 +58,5 @@ class dataSplitter:
         print prefix + ' data index successfully written ' + st
 
         
-if __name__ == '__main__':
-    main()
+#if __name__ == '__main__':
+#    main()

@@ -9,15 +9,16 @@ import logging
 
 def main():    
     dp = DataPuller()
-    rawDat = dp.fetchData()
+    rawDat = dp.fetchData()    
+    valList = dp.validate(rawDat)
     ds = dataSplitter.dataSplitter()
-    valList = ds.validate(rawDat)
     splitDict = ds.split(valList)
     for n in ['train','test']:
         ds.write(n,splitDict)
     
     
 class DataPuller:
+    
     def __init__(self):
         isDataPuller = True
     
@@ -33,6 +34,29 @@ class DataPuller:
                                   index_col=None, coerce_float=True, params=None)
         con.close()
         return df
+    
+    
+    def validate(self,df):
+        series = df['reporter_content']
+        probList = []
+        keepList = []
+        for i in range(len(series)):
+            ent = series[i]
+           # print ent
+            if isinstance(ent, float) == True:
+                probList.append(df['id'][i])
+            elif ent == 'None':
+                probList.append(df['id'][i])
+            else:
+                keepList.append(i)
+        if len(probList) > 0:            
+            print "\nATTENTION: Problem with 'reporter_content' cell in rows with following id's: "
+            for p in probList:
+                print str(p)
+            print('*'*40)
+        #valid = df.ix[keepList]
+        #return(valid.reset_index(drop=True))
+        return keepList
         
 
 
