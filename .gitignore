@@ -6,3 +6,4 @@ data/test/*
 data/train/*
 dataSplitter.pyc
 dgNotebook.ipynb
+settings.py
