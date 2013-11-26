@@ -36,7 +36,7 @@ class DataPuller:
         return df
     
     
-    def validate(self,df):
+    def validate(self,df,runReport=True):
         series = df['reporter_content']
         probList = []
         keepList = []
@@ -49,11 +49,12 @@ class DataPuller:
                 probList.append(df['id'][i])
             else:
                 keepList.append(i)
-        if len(probList) > 0:            
-            print "\nATTENTION: Problem with 'reporter_content' cell in rows with following id's: "
-            for p in probList:
-                print str(p)
-            print('*'*40)
+        if runReport == True:
+            if len(probList) > 0:            
+                print "\nATTENTION: Problem with 'reporter_content' cell in rows with following id's: "
+                for p in probList:
+                    print str(p)
+                print('*'*40)
         #valid = df.ix[keepList]
         #return(valid.reset_index(drop=True))
         return keepList
