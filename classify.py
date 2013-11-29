@@ -11,17 +11,66 @@ import pylab as pl
 import pandas as pd
 import DataPuller as DataPuller
 
+from optparse import OptionParser
 from cPickle import load,dump
 from sklearn import linear_model
 from sklearn import metrics
 from sklearn.utils.extmath import density
 
 
-from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import CountVectorizer,TfidfVectorizer
 
+
+# parse commandline arguments
+op = OptionParser()
+'''op.add_option("--report",
+              action="store_true", dest="print_report",
+              help="Print a detailed classification report.")
+op.add_option("--chi2_select",
+              action="store", type="int", dest="select_chi2",
+              help="Select some number of features using a chi-squared test")
+op.add_option("--confusion_matrix",
+              action="store_true", dest="print_cm",
+              help="Print the confusion matrix.")
+op.add_option("--top10",
+              action="store_true", dest="print_top10",
+              help="Print ten most discriminative terms per class"
+                   " for every classifier.")
+op.add_option("--all_categories",
+              action="store_true", dest="all_categories",
+              help="Whether to use all categories or not.")
+op.add_option("--use_hashing",
+              action="store_true",
+              help="Use a hashing vectorizer.")
+op.add_option("--n_features",
+              action="store", type=int, default=2 ** 16,
+              help="n_features when using the hashing vectorizer.")
+op.add_option("--filtered",
+              action="store_true",
+              help="Remove newsgroup information that is easily overfit: "
+                   "headers, signatures, and quoting.")'''
+op.add_option("--m","--model",dest='model_type',
+              help="designate which model to use",action='store',type='string')
+
+
+
+
+(opts, args) = op.parse_args()
+if len(args) > 0:
+    op.error("this script takes no arguments.")
+    sys.exit(1)
+
+'''print(__doc__)
+op.print_help()
+print()'''
+
+if opts.model_type:
+    MODEL = opts.model_type
+else:
+    MODEL = "Basic"
 
 def main():
-    bm = Model('Basic')        
+    bm = Model(MODEL)      
     sgdClas = linear_model.SGDClassifier(loss='log',penalty='elasticnet')
     benchmark(sgdClas,bm)
     
@@ -29,11 +78,8 @@ def main():
 class Model:
     
     def __init__(self,modelType='Basic'):        
-        if modelType == 'Basic':
-            self.modelType = 'Basic'
-            self.buildBasic()
         
-    def buildBasic(self):
+        #Establish Core elements of any model
         tr_ind = self.getSetIndices('train')
         te_ind = self.getSetIndices('test')
         dp = DataPuller.DataPuller()
@@ -45,6 +91,18 @@ class Model:
         self.test_df = df.ix[te_ind]
         articleStrs_tr = self.train_df['reporter_content'].tolist()
         articleStrs_te = self.test_df['reporter_content'].tolist()
+        
+        #Put specific model code here:
+        if modelType == 'Basic':
+            self.modelType = 'Basic'
+            self.buildBasic(articleStrs_tr,articleStrs_te)
+        
+        if modelType == "InvDocFreq":
+            self.modelType = "InvDocFreq"
+            self.buildInvDoc(articleStrs_tr,articleStrs_te)
+        
+    
+    def buildBasic(self,articleStrs_tr,articleStrs_te):
         self.CV = CountVectorizer()
         self.X_train = self.CV.fit_transform(articleStrs_tr)
         self.X_test = self.CV.transform(articleStrs_te)
@@ -54,6 +112,20 @@ class Model:
         np.asarray(self.X_train.sum(axis=0)).ravel())
         self.freqDist =  sorted(t, key=lambda a: -a[1])
         self.feature_names = np.asarray(self.CV.get_feature_names())
+        
+    def buildInvDoc(self,articleStrs_tr,articleStrs_te):
+        self.TFV = TfidfVectorizer()
+        self.X_train = self.TFV.fit_transform(articleStrs_tr)
+        self.X_test = self.TFV.transform(articleStrs_te)
+        self.y_train = self.train_df['sensitive_flag'].tolist()
+        self.y_test = self.test_df['sensitive_flag'].tolist()
+        t = zip(self.TFV.get_feature_names(),
+        np.asarray(self.X_train.sum(axis=0)).ravel())
+        self.freqDist =  sorted(t, key=lambda a: -a[1])
+        self.feature_names = np.asarray(self.TFV.get_feature_names())        
+        
+        
+        
                                 
     def sqlChecker(self,df,pull_tr,pull_te):
         valrecs = len(df)
@@ -95,7 +167,8 @@ class Model:
     
 def benchmark(clf,Model):
     print('_' * 80)
-    print("Training: ")
+    
+    print("Training: [Model Type: "+ MODEL+ "]")
     print(clf)
     t0 = time.time()
     clf.fit(Model.X_train, Model.y_train)
