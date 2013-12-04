@@ -6,6 +6,8 @@ import os
 import datetime
 import time
 import sys
+import re
+
 import numpy as np
 import pylab as pl
 import pandas as pd
@@ -17,11 +19,11 @@ from sklearn import linear_model
 from sklearn import metrics
 from sklearn.utils.extmath import density
 
-
 from sklearn.feature_extraction.text import CountVectorizer,TfidfVectorizer
 
+from nltk import FreqDist
 
-# parse commandline arguments
+# parse commandline options and arguments
 op = OptionParser()
 '''op.add_option("--report",
               action="store_true", dest="print_report",
@@ -49,10 +51,12 @@ op.add_option("--filtered",
               action="store_true",
               help="Remove newsgroup information that is easily overfit: "
                    "headers, signatures, and quoting.")'''
+
 op.add_option("--m","--model",dest='model_type',
               help="designate which model to use",action='store',type='string')
 
-
+op.add_option("--r","--report",dest="training_document_info",
+              help="report information on the training documents", action="store_true")
 
 
 (opts, args) = op.parse_args()
@@ -69,19 +73,25 @@ if opts.model_type:
 else:
     MODEL = "Basic"
 
+if opts.training_document_info:
+    REPORT_TRAINING_DOCS_INFO = opts.training_document_info
+else:
+    REPORT_TRAINING_DOCS_INFO = False
+
 def main():
-    bm = Model(MODEL)      
+    bm = Model(MODEL, REPORT_TRAINING_DOCS_INFO)
     sgdClas = linear_model.SGDClassifier(loss='log',penalty='elasticnet')
     benchmark(sgdClas,bm)
     
     
 class Model:
     
-    def __init__(self,modelType='Basic'):        
+    def __init__(self,modelType='Basic',trainingDocumentInfo=False):
         
         #Establish Core elements of any model
         tr_ind = self.getSetIndices('train')
         te_ind = self.getSetIndices('test')
+
         dp = DataPuller.DataPuller()
         rawdf = dp.fetchData()
         valList = dp.validate(rawdf,runReport=False)
@@ -91,7 +101,10 @@ class Model:
         self.test_df = df.ix[te_ind]
         articleStrs_tr = self.train_df['reporter_content'].tolist()
         articleStrs_te = self.test_df['reporter_content'].tolist()
-        
+
+        if trainingDocumentInfo:
+            self.outputDocumentStats(articleStrs_tr, 'Training')
+
         #Put specific model code here:
         if modelType == 'Basic':
             self.modelType = 'Basic'
@@ -100,8 +113,11 @@ class Model:
         if modelType == "InvDocFreq":
             self.modelType = "InvDocFreq"
             self.buildInvDoc(articleStrs_tr,articleStrs_te)
-        
-    
+
+        if modelType == "BasicBigram":
+            self.modelType = "BasicBigram"
+            self.buildBasicBigram(articleStrs_tr, articleStrs_te)
+
     def buildBasic(self,articleStrs_tr,articleStrs_te):
         self.CV = CountVectorizer()
         self.X_train = self.CV.fit_transform(articleStrs_tr)
@@ -112,7 +128,18 @@ class Model:
         np.asarray(self.X_train.sum(axis=0)).ravel())
         self.freqDist =  sorted(t, key=lambda a: -a[1])
         self.feature_names = np.asarray(self.CV.get_feature_names())
-        
+
+    def buildBasicBigram(self, articleStrs_tr, articleStrs_te):
+        self.CV = CountVectorizer(ngram_range=(2,2), token_pattern=r'\b\w+\b')
+        self.X_train = self.CV.fit_transform(articleStrs_tr)
+        self.X_test = self.CV.transform(articleStrs_te)
+        self.y_train = self.train_df['sensitive_flag'].tolist()
+        self.y_test = self.test_df['sensitive_flag'].tolist()
+        t = zip(self.CV.get_feature_names(),
+        np.asarray(self.X_train.sum(axis=0)).ravel())
+        self.freqDist =  sorted(t, key=lambda a: -a[1])
+        self.feature_names = np.asarray(self.CV.get_feature_names())
+
     def buildInvDoc(self,articleStrs_tr,articleStrs_te):
         self.TFV = TfidfVectorizer()
         self.X_train = self.TFV.fit_transform(articleStrs_tr)
@@ -122,11 +149,26 @@ class Model:
         t = zip(self.TFV.get_feature_names(),
         np.asarray(self.X_train.sum(axis=0)).ravel())
         self.freqDist =  sorted(t, key=lambda a: -a[1])
-        self.feature_names = np.asarray(self.TFV.get_feature_names())        
-        
-        
-        
-                                
+        self.feature_names = np.asarray(self.TFV.get_feature_names())
+
+    def outputDocumentStats(self, documents, doc_set_name):
+        """
+            Outputs a information on document list
+        """
+        print('_' * 80)
+        print('%s Documents Statistics' % doc_set_name)
+
+        print('number of documents: %d' % len(documents))
+
+        corpus_words = [ word for doc in documents
+                        for word in re.sub('\W',' ',doc).lower().split(' ') ]
+
+        avg_doc_length = len(corpus_words) / float(len(documents))
+        print('average document length: %0.3f words' % avg_doc_length )
+        print('approx. number of words in corpus: %d' % len(corpus_words))
+        vocab = set(corpus_words)
+        print('approx. vocabulary size: %d' % len(vocab))
+
     def sqlChecker(self,df,pull_tr,pull_te):
         valrecs = len(df)
         #print 'valrecs: ' + str(valrecs)
@@ -160,10 +202,7 @@ class Model:
             oP = open(dirtoWalk+'/'+latestFi,'r')
             indices = load(oP)
             return indices
-            
 
-
-    
     
 def benchmark(clf,Model):
     print('_' * 80)
