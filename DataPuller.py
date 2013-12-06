@@ -42,10 +42,12 @@ class DataPuller:
         keepList = []
         for i in range(len(series)):
             ent = series[i]
-           # print ent
+            # print ent
             if isinstance(ent, float) == True:
                 probList.append(df['id'][i])
             elif ent == 'None':
+                probList.append(df['id'][i])
+            elif 'Thanks for Registering!' in ent:
                 probList.append(df['id'][i])
             else:
                 keepList.append(i)

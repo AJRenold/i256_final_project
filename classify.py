@@ -21,7 +21,11 @@ from sklearn.utils.extmath import density
 
 from sklearn.feature_extraction.text import CountVectorizer,TfidfVectorizer
 
-from nltk import FreqDist
+from nltk import (
+        FreqDist,
+        NaiveBayesClassifier,
+        classify
+    )
 
 # parse commandline options and arguments
 op = OptionParser()
@@ -80,10 +84,14 @@ else:
 
 def main():
     bm = Model(MODEL, REPORT_TRAINING_DOCS_INFO)
-    sgdClas = linear_model.SGDClassifier(loss='log',penalty='elasticnet')
-    benchmark(sgdClas,bm)
     
-    
+    if 'NLTK' in MODEL:
+        clf = NaiveBayesClassifier
+        benchmarkNLTK(clf,bm)
+    else:
+        sgdClas = linear_model.SGDClassifier(loss='log',penalty='elasticnet')
+        benchmarkSKLearn(sgdClas,bm)
+
 class Model:
     
     def __init__(self,modelType='Basic',trainingDocumentInfo=False):
@@ -118,6 +126,10 @@ class Model:
             self.modelType = "BasicBigram"
             self.buildBasicBigram(articleStrs_tr, articleStrs_te)
 
+        if modelType == "NLTKSingleWord":
+            self.modelType = "NLTKSingleWord"
+            self.buldNLTKSingleWordFeatures(articleStrs_tr, articleStrs_te)
+
     def buildBasic(self,articleStrs_tr,articleStrs_te):
         self.CV = CountVectorizer()
         self.X_train = self.CV.fit_transform(articleStrs_tr)
@@ -150,6 +162,21 @@ class Model:
         np.asarray(self.X_train.sum(axis=0)).ravel())
         self.freqDist =  sorted(t, key=lambda a: -a[1])
         self.feature_names = np.asarray(self.TFV.get_feature_names())
+
+    def buldNLTKSingleWordFeatures(self, articleStrs_tr, articleStrs_te):
+        
+        def wordFeatures(doc):
+            features = {}
+            for word in re.sub('\W',' ',doc).lower().split(' '):
+                features[word] = True
+
+            return features
+
+        training_features = [ wordFeatures(doc) for doc in articleStrs_tr ]
+        testing_features = [ wordFeatures(doc) for doc in articleStrs_te ]
+
+        self.training_set = zip(training_features, self.train_df['sensitive_flag'].tolist())
+        self.test_set = zip(testing_features, self.test_df['sensitive_flag'].tolist() )
 
     def outputDocumentStats(self, documents, doc_set_name):
         """
@@ -203,8 +230,26 @@ class Model:
             indices = load(oP)
             return indices
 
-    
-def benchmark(clf,Model):
+def benchmarkNLTK(classifier,Model):
+    print('_' * 80)
+    print("Training: [Model Type: "+ MODEL+ "]")
+
+    print(classifier)
+    t0 = time.time()
+    clf = classifier.train(Model.training_set)
+    train_time = time.time() - t0
+    print("train time: %0.3fs" % train_time)
+
+    t0 = time.time()
+    accuracy = classify.accuracy(clf, Model.test_set)
+    test_time = time.time() - t0
+    print("test time:  %0.3fs" % test_time)
+    print("nltk classify accuracy:   %0.3f" % accuracy)
+
+    print("50 most informative features")
+    clf.show_most_informative_features(50)
+
+def benchmarkSKLearn(clf,Model):
     print('_' * 80)
     
     print("Training: [Model Type: "+ MODEL+ "]")
@@ -249,7 +294,6 @@ def benchmark(clf,Model):
     clf_descr = str(clf).split('(')[0]
     return clf_descr, score, train_time, test_time
     
-
 
 def trim(s):
     """Trim string to fit on terminal (assuming 80-column display)"""
