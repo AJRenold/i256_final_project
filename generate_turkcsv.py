@@ -12,7 +12,12 @@ from itertools import islice
 def main():
 
     with open('data/turk_data/turk_data_ids_1.csv', 'rb') as infile:
-        print 'csv of ids'
+        turked_ids = []
+        for row in csv.reader(infile):
+             turked_ids.extend(row)
+
+    # IDs previously submitted to mturk
+    turked_ids = set(turked_ids)
 
     try:
         con = mdb.connect('localhost', 'arenold', settings.mysql_pass, 'arenold')
@@ -60,16 +65,17 @@ def main():
 
     row = []
     row_ids = []
-    for idx, item in islice(not_sensitive_df[['link','id']].T.iteritems(),None):
+    for idx, item in islice(not_sensitive_df[['link','id','content_len']].T.iteritems(),None):
         link = item['link'] + '#' + str(item['id'])
+        if item['content_len'] >= 100 and str(item['id']) not in turked_ids:
 
-        if len(row) < 3:
-            row.append(link)
+            if len(row) < 3:
+                row.append(link)
 
-        else:
-            shuffle(row)
-            data.append(row)
-            row = [ link ]
+            else:
+                shuffle(row)
+                data.append(row)
+                row = [ link ]
 
     print 'data',len(data)
     print 'ids',len(ids)

@@ -8,6 +8,7 @@ import time
 import sys
 import re
 
+from bs4 import BeautifulSoup
 import numpy as np
 import pylab as pl
 import pandas as pd
@@ -107,11 +108,18 @@ class Model:
         self.sqlChecker(df,tr_ind,te_ind)
         self.train_df = df.ix[tr_ind]
         self.test_df = df.ix[te_ind]
-        articleStrs_tr = self.train_df['reporter_content'].tolist()
-        articleStrs_te = self.test_df['reporter_content'].tolist()
+
+        self.train_df = self.addContentColumns(self.train_df)
+        self.test_df = self.addContentColumns(self.test_df)
+
+        articleStrs_tr = self.train_df['content'].tolist()
+        articleStrs_te = self.test_df['content'].tolist()
 
         if trainingDocumentInfo:
             self.outputDocumentStats(articleStrs_tr, 'Training')
+
+        if trainingDocumentInfo:
+            self.outputDocumentStats(articleStrs_te, 'Testing')
 
         #Put specific model code here:
         if modelType == 'Basic':
@@ -177,6 +185,22 @@ class Model:
 
         self.training_set = zip(training_features, self.train_df['sensitive_flag'].tolist())
         self.test_set = zip(testing_features, self.test_df['sensitive_flag'].tolist() )
+
+
+    def addContentColumns(self, df):
+
+        def getText(parser_content):
+            soup = BeautifulSoup(parser_content)
+            text = re.sub('\n',' ',soup.getText().strip())
+            return text
+
+        def getTextLen(content):
+            return len(content.split(' '))
+
+        df['content'] = df['parser_content'].apply(getText)
+        df['content_len'] = df['content'].apply(getTextLen)
+
+        return df
 
     def outputDocumentStats(self, documents, doc_set_name):
         """
