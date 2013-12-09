@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from bs4 import BeautifulSoup
+from collections import Counter, defaultdict
 import csv
 import MySQLdb as mdb
 import pandas as pd
@@ -11,10 +12,44 @@ from itertools import islice
 
 def main():
 
+    print 'loading turked results'
     with open('data/turk_data/turk_data_ids_1.csv', 'rb') as infile:
         turked_ids = []
         for row in csv.reader(infile):
              turked_ids.extend(row)
+
+    """
+    almost_complete = defaultdict(list)
+    id_url_dict = {}
+    with open('data/turk_data/Batch_1353817_batch_results.csv', 'rU') as infile:
+        id_count = Counter()
+        for row in islice(csv.reader(infile),1,None):
+            for link in row[27:30]:
+                link_id = link[link.find('#')+1:]
+                id_url_dict[link_id] = link
+                turked_ids.append(link_id)
+
+                id_count[link_id] += 1
+
+        for i, val in id_count.items():
+            almost_complete[val].append(id_url_dict[i])
+    """
+    """
+    for count, links in almost_complete.items():
+
+        with open('data/turk_data/turk_data_partial_' + str(count) +'.csv', 'wb') as csvfile:
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(['site1', 'site2', 'site3'])
+            row = []
+            for link in links:
+                if len(row) < 3:
+                    row.append(link)
+                else:
+                    csvwriter.writerow(row)
+                    row = [link]
+
+    print 'created partials file'
+    """
 
     # IDs previously submitted to mturk
     turked_ids = set(turked_ids)
@@ -67,7 +102,7 @@ def main():
     row_ids = []
     for idx, item in islice(not_sensitive_df[['link','id','content_len']].T.iteritems(),None):
         link = item['link'] + '#' + str(item['id'])
-        if item['content_len'] >= 100 and str(item['id']) not in turked_ids:
+        if item['content_len'] >= 100 and str(item['id']) in turked_ids:
 
             if len(row) < 3:
                 row.append(link)
@@ -80,13 +115,11 @@ def main():
     print 'data',len(data)
     print 'ids',len(ids)
 
-    """
-    with open('data/turk_data/turk_data_2.csv', 'wb') as csvfile:
+    with open('data/turk_data/turk_data_partial_2_a.csv', 'wb') as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(['site1', 'site2', 'site3'])
         for row in data:
             csvwriter.writerow(row)
-    """
 
 def validate(df):
     series = df['reporter_content']

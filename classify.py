@@ -105,9 +105,13 @@ class Model:
         rawdf = dp.fetchData()
         valList = dp.validate(rawdf,runReport=False)
         df = rawdf.ix[valList]
+
         self.sqlChecker(df,tr_ind,te_ind)
         self.train_df = df.ix[tr_ind]
         self.test_df = df.ix[te_ind]
+
+        self.train_df = self.addAverageTurkRating(self.train_df)
+        self.test_df = self.addAverageTurkRating(self.test_df)
 
         self.train_df = self.addContentColumns(self.train_df)
         self.test_df = self.addContentColumns(self.test_df)
@@ -142,8 +146,8 @@ class Model:
         self.CV = CountVectorizer()
         self.X_train = self.CV.fit_transform(articleStrs_tr)
         self.X_test = self.CV.transform(articleStrs_te)
-        self.y_train = self.train_df['sensitive_flag'].tolist()
-        self.y_test = self.test_df['sensitive_flag'].tolist()
+        self.y_train = self.train_df['turk_sensitive_flag'].tolist()
+        self.y_test = self.test_df['turk_sensitive_flag'].tolist()
         t = zip(self.CV.get_feature_names(),
         np.asarray(self.X_train.sum(axis=0)).ravel())
         self.freqDist =  sorted(t, key=lambda a: -a[1])
@@ -153,8 +157,8 @@ class Model:
         self.CV = CountVectorizer(ngram_range=(2,2), token_pattern=r'\b\w+\b')
         self.X_train = self.CV.fit_transform(articleStrs_tr)
         self.X_test = self.CV.transform(articleStrs_te)
-        self.y_train = self.train_df['sensitive_flag'].tolist()
-        self.y_test = self.test_df['sensitive_flag'].tolist()
+        self.y_train = self.train_df['turk_sensitive_flag'].tolist()
+        self.y_test = self.test_df['turk_sensitive_flag'].tolist()
         t = zip(self.CV.get_feature_names(),
         np.asarray(self.X_train.sum(axis=0)).ravel())
         self.freqDist =  sorted(t, key=lambda a: -a[1])
@@ -164,8 +168,8 @@ class Model:
         self.TFV = TfidfVectorizer()
         self.X_train = self.TFV.fit_transform(articleStrs_tr)
         self.X_test = self.TFV.transform(articleStrs_te)
-        self.y_train = self.train_df['sensitive_flag'].tolist()
-        self.y_test = self.test_df['sensitive_flag'].tolist()
+        self.y_train = self.train_df['turk_sensitive_flag'].tolist()
+        self.y_test = self.test_df['turk_sensitive_flag'].tolist()
         t = zip(self.TFV.get_feature_names(),
         np.asarray(self.X_train.sum(axis=0)).ravel())
         self.freqDist =  sorted(t, key=lambda a: -a[1])
@@ -183,8 +187,8 @@ class Model:
         training_features = [ wordFeatures(doc) for doc in articleStrs_tr ]
         testing_features = [ wordFeatures(doc) for doc in articleStrs_te ]
 
-        self.training_set = zip(training_features, self.train_df['sensitive_flag'].tolist())
-        self.test_set = zip(testing_features, self.test_df['sensitive_flag'].tolist() )
+        self.training_set = zip(training_features, self.train_df['turk_sensitive_flag'].tolist())
+        self.test_set = zip(testing_features, self.test_df['turk_sensitive_flag'].tolist() )
 
 
     def addContentColumns(self, df):
@@ -199,6 +203,27 @@ class Model:
 
         df['content'] = df['parser_content'].apply(getText)
         df['content_len'] = df['content'].apply(getTextLen)
+
+        return df
+
+    def addAverageTurkRating(self, df):
+
+        def averageTurkRating(row):
+            ratings = []
+            for i in range(5):
+                if row['turk_rating'+str(i)] != '':
+                    ratings.append(int(row['turk_rating'+str(i)]))
+
+            return np.mean(ratings)
+
+        def turkRatingLabel(avg_rating):
+            if avg_rating >= 0.5:
+                return 1
+            else:
+                return 0
+
+        df['avg_turk_ratings'] = df.apply(averageTurkRating, axis=1)
+        df['turk_sensitive_flag'] = df['avg_turk_ratings'].apply(turkRatingLabel)
 
         return df
 
