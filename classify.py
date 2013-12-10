@@ -110,11 +110,21 @@ class Model:
         self.train_df = df.ix[tr_ind]
         self.test_df = df.ix[te_ind]
 
-        self.train_df = self.addAverageTurkRating(self.train_df)
-        self.test_df = self.addAverageTurkRating(self.test_df)
+        ## Adds turk ratings to the dataframe
+        self.train_df = self.addTurkRatingData(self.train_df)
+        self.test_df = self.addTurkRatingData(self.test_df)
 
+        ## Adds 'content' column to the dataframe
         self.train_df = self.addContentColumns(self.train_df)
         self.test_df = self.addContentColumns(self.test_df)
+
+        ## filters the training dataframe to rows that have 3 or more turk ratings
+        filter_len = self.train_df['count_turk_ratings'].map(lambda x: x >= 3)
+        self.train_df = self.train_df[filter_len]
+
+        ## filters the testing dataframe to rows that have 3 ore more turk ratings
+        filter_len = self.test_df['count_turk_ratings'].map(lambda x: x >= 3)
+        self.test_df = self.test_df[filter_len]
 
         articleStrs_tr = self.train_df['content'].tolist()
         articleStrs_te = self.test_df['content'].tolist()
@@ -143,7 +153,7 @@ class Model:
             self.buldNLTKSingleWordFeatures(articleStrs_tr, articleStrs_te)
 
     def buildBasic(self,articleStrs_tr,articleStrs_te):
-        self.CV = CountVectorizer()
+        self.CV = CountVectorizer(stop_words='english')
         self.X_train = self.CV.fit_transform(articleStrs_tr)
         self.X_test = self.CV.transform(articleStrs_te)
         self.y_train = self.train_df['turk_sensitive_flag'].tolist()
@@ -206,7 +216,15 @@ class Model:
 
         return df
 
-    def addAverageTurkRating(self, df):
+    def addTurkRatingData(self, df):
+
+        def countTurkRatings(row):
+            count = 0
+            for i in range(5):
+                if row['turk_rating'+str(i)] != '':
+                    count += 1
+
+            return count
 
         def averageTurkRating(row):
             ratings = []
@@ -222,6 +240,7 @@ class Model:
             else:
                 return 0
 
+        df['count_turk_ratings'] = df.apply(countTurkRatings, axis=1)
         df['avg_turk_ratings'] = df.apply(averageTurkRating, axis=1)
         df['turk_sensitive_flag'] = df['avg_turk_ratings'].apply(turkRatingLabel)
 
@@ -328,7 +347,15 @@ def benchmarkSKLearn(clf,Model):
             top10 = np.argsort(clf.coef_[0])[-10:]
             print(trim("%s"
                       % (" ".join(Model.feature_names[top10]))))
-        print""
+            print("\nNext 10")
+            top10to20 = np.argsort(clf.coef_[0])[-20:-10]
+            print(trim("%s"
+                      % (" ".join(Model.feature_names[top10to20]))))
+            print("\nNext 10")
+            top20to30 = np.argsort(clf.coef_[0])[-30:-20]
+            print(trim("%s"
+                      % (" ".join(Model.feature_names[top20to30]))))
+        print
 
     #if opts.print_report:
         print("classification report:")

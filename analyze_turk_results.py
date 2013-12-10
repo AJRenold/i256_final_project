@@ -6,6 +6,8 @@ import pandas as pd
 import numpy as np
 import settings
 
+total_ratings = 0
+
 def main():
 
     try:
@@ -22,11 +24,14 @@ def main():
     filter_thanks = df['reporter_content'].map(lambda x: 'Thanks for Registering!' not in x )
     df = df[filter_thanks]
 
+
     def countTurkRatings(row):
+        global total_ratings
         count = 0
         for i in range(5):
             if row['turk_rating'+str(i)] != '':
                 count += 1
+                total_ratings += 1
 
         return count
 
@@ -40,6 +45,7 @@ def main():
 
     df['count_turk_ratings'] = df.apply(countTurkRatings, axis=1)
     
+    print 'Total number of Turk Ratings', total_ratings
     print df['count_turk_ratings'].describe()
     print
     print df['count_turk_ratings'].value_counts()
@@ -54,8 +60,8 @@ def main():
     factor = pd.cut(df['avg_turk_ratings'], [0., .25, .5, .75, 1])
     print pd.value_counts(factor)
 
-    for idx, item in df[['link', 'avg_turk_ratings']].T.iteritems():
-        if item['avg_turk_ratings'] > 0.5:
+    for idx, item in df[['link', 'avg_turk_ratings', 'count_turk_ratings']].T.iteritems():
+        if item['avg_turk_ratings'] > 0.5 and item['count_turk_ratings'] >= 5:
             print item['avg_turk_ratings'], item['link']
 
 if __name__ == '__main__':
