@@ -319,7 +319,7 @@ def benchmarkNLTK(classifier,Model):
 
     print("50 most informative features")
     clf.show_most_informative_features(50)
-
+    
 def prepROC(trainedClas,Model):
     df_probs = pd.DataFrame(trainedClas.predict_proba(Model.X_test))
     df_probs.to_csv('pd_'+bm.modelType+'_proba'+'.csv')
