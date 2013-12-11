@@ -19,6 +19,8 @@ from cPickle import load,dump
 from sklearn import linear_model
 from sklearn import metrics
 from sklearn.utils.extmath import density
+from sklearn import cross_validation
+
 
 from sklearn.feature_extraction.text import CountVectorizer,TfidfVectorizer
 
@@ -91,7 +93,8 @@ def main():
         benchmarkNLTK(clf,bm)
     else:
         sgdClas = linear_model.SGDClassifier(loss='log',penalty='elasticnet')
-        benchmarkSKLearn(sgdClas,bm)
+        #benchmarkSKLearn(sgdClas,bm)
+        crossValidate(sgdClas,bm)
 
 class Model:
     
@@ -316,6 +319,17 @@ def benchmarkNLTK(classifier,Model):
 
     print("50 most informative features")
     clf.show_most_informative_features(50)
+
+def prepROC(trainedClas,Model):
+    df_probs = pd.DataFrame(trainedClas.predict_proba(Model.X_test))
+    df_probs.to_csv('pd_'+bm.modelType+'_proba'+'.csv')
+    print('Please add name of classifier to file name')
+
+def crossValidate(clf,Model):
+    scores = cross_validation.cross_val_score(clf, Model.X_train, np.array(Model.y_train), cv=10, scoring='f1')
+    print('\n')
+    print("F1 Score: %0.2f (+/- %0.2f)" % (scores.mean(), scores.std() * 2))
+    print('\n')
 
 def benchmarkSKLearn(clf,Model):
     print('_' * 80)
