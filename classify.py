@@ -2,9 +2,11 @@
 
 #File: classify.py
 
+from copy import copy
 import os
 import datetime
 import time
+import string
 import sys
 import re
 
@@ -21,13 +23,18 @@ from sklearn import metrics
 from sklearn.utils.extmath import density
 from sklearn import cross_validation
 
-
 from sklearn.feature_extraction.text import CountVectorizer,TfidfVectorizer
 
 from nltk import (
         FreqDist,
         NaiveBayesClassifier,
-        classify
+        classify,
+        word_tokenize,
+        bigrams
+    )
+
+from bigram_features import (
+        bigrams_maximizing_prob_diff
     )
 
 # parse commandline options and arguments
@@ -142,7 +149,7 @@ class Model:
         if modelType == 'Basic':
             self.modelType = 'Basic'
             self.buildBasic(articleStrs_tr,articleStrs_te)
-        
+
         if modelType == "InvDocFreq":
             self.modelType = "InvDocFreq"
             self.buildInvDoc(articleStrs_tr,articleStrs_te)
@@ -153,7 +160,11 @@ class Model:
 
         if modelType == "NLTKSingleWord":
             self.modelType = "NLTKSingleWord"
-            self.buldNLTKSingleWordFeatures(articleStrs_tr, articleStrs_te)
+            self.buildNLTKSingleWordFeatures(articleStrs_tr, articleStrs_te)
+
+        if modelType == "NLTKBigram":
+            self.modelType = "NLTKBigram"
+            self.buildNLTKBigramFeatures(articleStrs_tr, articleStrs_te)
 
     def buildBasic(self,articleStrs_tr,articleStrs_te):
         self.CV = CountVectorizer(stop_words='english')
@@ -188,7 +199,7 @@ class Model:
         self.freqDist =  sorted(t, key=lambda a: -a[1])
         self.feature_names = np.asarray(self.TFV.get_feature_names())
 
-    def buldNLTKSingleWordFeatures(self, articleStrs_tr, articleStrs_te):
+    def buildNLTKSingleWordFeatures(self, articleStrs_tr, articleStrs_te):
         
         def wordFeatures(doc):
             features = {}
@@ -202,7 +213,27 @@ class Model:
 
         self.training_set = zip(training_features, self.train_df['turk_sensitive_flag'].tolist())
         self.test_set = zip(testing_features, self.test_df['turk_sensitive_flag'].tolist() )
+    
+    def buildNLTKBigramFeatures(self, articleStrs_tr, articleStrs_te):
 
+        def bigramFeatures(doc, feature_set):
+            features = copy(feature_set)
+            words = [w.lower() for w in word_tokenize(doc) if w not in string.punctuation]
+            for bigram in bigrams(words):
+                if bigram in feature_set:
+                    features[bigram] = True
+
+            return features
+
+        bigram_features = { bigram: False for prob_diff, bigram in
+                                bigrams_maximizing_prob_diff(zip(articleStrs_tr, 
+                                self.train_df['turk_sensitive_flag'].tolist()), 500) }
+
+        training_features = [ bigramFeatures(doc, bigram_features) for doc in articleStrs_tr ]
+        testing_features = [ bigramFeatures(doc, bigram_features) for doc in articleStrs_te ]
+
+        self.training_set = zip(training_features, self.train_df['turk_sensitive_flag'].tolist())
+        self.test_set = zip(testing_features, self.test_df['turk_sensitive_flag'].tolist() )
 
     def addContentColumns(self, df):
 
@@ -318,7 +349,7 @@ def benchmarkNLTK(classifier,Model):
     print("nltk classify accuracy:   %0.3f" % accuracy)
 
     print("50 most informative features")
-    clf.show_most_informative_features(50)
+    clf.show_most_informative_features(100)
     
 def prepROC(trainedClas,Model):
     df_probs = pd.DataFrame(trainedClas.predict_proba(Model.X_test))
