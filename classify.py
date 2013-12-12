@@ -2,6 +2,7 @@
 
 #File: classify.py
 
+from collections import defaultdict
 from copy import copy
 import os
 import datetime
@@ -30,7 +31,10 @@ from nltk import (
         NaiveBayesClassifier,
         classify,
         word_tokenize,
-        bigrams
+        bigrams,
+        precision,
+        recall,
+        f_measure
     )
 
 from bigram_features import (
@@ -342,14 +346,29 @@ def benchmarkNLTK(classifier,Model):
     train_time = time.time() - t0
     print("train time: %0.3fs" % train_time)
 
+    refsets = defaultdict(set)
+    testsets = defaultdict(set)
+
     t0 = time.time()
-    accuracy = classify.accuracy(clf, Model.test_set)
+    for i, (features, label) in enumerate(Model.test_set):
+        refsets[label].add(i)
+        observed = clf.classify(features)
+        testsets[observed].add(i)
+
     test_time = time.time() - t0
     print("test time:  %0.3fs" % test_time)
-    print("nltk classify accuracy:   %0.3f" % accuracy)
+    print 'Sensitive precision:', precision(refsets[1], testsets[1])
+    print 'Sensitive recall:', recall(refsets[1], testsets[1])
+    print 'Sensitive F-measure:', f_measure(refsets[1], testsets[1])
+    print 'Not Sens precision:', precision(refsets[0], testsets[0])
+    print 'Not Sens recall:', recall(refsets[0], testsets[0])
+    print 'Not Sens F-measure:', f_measure(refsets[0], testsets[0])
 
-    print("50 most informative features")
-    clf.show_most_informative_features(100)
+    #accuracy = classify.accuracy(clf, Model.test_set)
+    #print("nltk classify accuracy:   %0.3f" % accuracy)
+
+    print("\n50 most informative features")
+    clf.show_most_informative_features(50)
     
 def prepROC(trainedClas,Model):
     df_probs = pd.DataFrame(trainedClas.predict_proba(Model.X_test))
