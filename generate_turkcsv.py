@@ -3,22 +3,27 @@
 from bs4 import BeautifulSoup
 from collections import Counter, defaultdict
 import csv
+from itertools import islice
 import MySQLdb as mdb
 import pandas as pd
-import settings
-import re
 from random import choice, random, shuffle
-from itertools import islice
+import re
+import settings
 
 def main():
 
+    # Load turk data from our first pilot batch
     print 'loading turked results'
     with open('data/turk_data/turk_data_ids_1.csv', 'rb') as infile:
         turked_ids = []
         for row in csv.reader(infile):
              turked_ids.extend(row)
 
+
     """
+    ## LOAD BATCH THAT WAS NOT COMPLETED
+    ## Creates new batches based on the number of times each row was
+    ## partially labelled
     almost_complete = defaultdict(list)
     id_url_dict = {}
     with open('data/turk_data/Batch_1353817_batch_results.csv', 'rU') as infile:
@@ -33,8 +38,6 @@ def main():
 
         for i, val in id_count.items():
             almost_complete[val].append(id_url_dict[i])
-    """
-    """
     for count, links in almost_complete.items():
 
         with open('data/turk_data/turk_data_partial_' + str(count) +'.csv', 'wb') as csvfile:
@@ -54,6 +57,7 @@ def main():
     # IDs previously submitted to mturk
     turked_ids = set(turked_ids)
 
+    # Connect to our database and get a dataframe
     try:
         con = mdb.connect('localhost', 'arenold', settings.mysql_pass, 'arenold')
         con.set_character_set('utf8')
@@ -73,13 +77,8 @@ def main():
     def getTextLen(content):
         return len(content.split(' '))
 
-    print df.columns
     validate(df)
-
-    df['content'] = df['parser_content'].apply(getText)
-    df['content_len'] = df['content'].apply(getTextLen)
-
-    print df['content_len'].describe()
+    df = addContentColumns(df)
 
     sensitive_df = df[df['sensitive_flag'] == 1]
     filter_thanks = sensitive_df['reporter_content'].map(lambda x: 'Thanks for Registering!' not in x 
@@ -95,6 +94,8 @@ def main():
 
     sensitive_links = sensitive_df['link'].tolist()
 
+    # Loop through dataframe to generate csv for mechanical turk
+    # each row has 3 urls with the database id appended as a hash
     ids = []
     data = []
 
@@ -112,10 +113,8 @@ def main():
                 data.append(row)
                 row = [ link ]
 
-    print 'data',len(data)
-    print 'ids',len(ids)
-
-    with open('data/turk_data/turk_data_partial_2_a.csv', 'wb') as csvfile:
+    # Output the batch csv file
+    with open('data/turk_data/turk_data_.csv', 'wb') as csvfile:
         csvwriter = csv.writer(csvfile)
         csvwriter.writerow(['site1', 'site2', 'site3'])
         for row in data:
@@ -134,6 +133,21 @@ def validate(df):
             print 'Thanks', df['id'][i]
         else:
             pass
+
+def addContentColumns(df):
+
+    def getText(parser_content):
+        soup = BeautifulSoup(parser_content)
+        text = re.sub('\n',' ',soup.getText().strip())
+        return text
+
+    def getTextLen(content):
+        return len(content.split(' '))
+
+    df['content'] = df['parser_content'].apply(getText)
+    df['content_len'] = df['content'].apply(getTextLen)
+
+    return df
 
 if __name__ == '__main__':
     main()

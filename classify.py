@@ -20,6 +20,10 @@ import DataPuller as DataPuller
 from optparse import OptionParser
 from cPickle import load,dump
 from sklearn import linear_model
+from sklearn import svm
+from sklearn.ensemble import RandomForestClassifier
+
+
 from sklearn import metrics
 from sklearn.utils.extmath import density
 from sklearn import cross_validation
@@ -43,32 +47,6 @@ from bigram_features import (
 
 # parse commandline options and arguments
 op = OptionParser()
-'''op.add_option("--report",
-              action="store_true", dest="print_report",
-              help="Print a detailed classification report.")
-op.add_option("--chi2_select",
-              action="store", type="int", dest="select_chi2",
-              help="Select some number of features using a chi-squared test")
-op.add_option("--confusion_matrix",
-              action="store_true", dest="print_cm",
-              help="Print the confusion matrix.")
-op.add_option("--top10",
-              action="store_true", dest="print_top10",
-              help="Print ten most discriminative terms per class"
-                   " for every classifier.")
-op.add_option("--all_categories",
-              action="store_true", dest="all_categories",
-              help="Whether to use all categories or not.")
-op.add_option("--use_hashing",
-              action="store_true",
-              help="Use a hashing vectorizer.")
-op.add_option("--n_features",
-              action="store", type=int, default=2 ** 16,
-              help="n_features when using the hashing vectorizer.")
-op.add_option("--filtered",
-              action="store_true",
-              help="Remove newsgroup information that is easily overfit: "
-                   "headers, signatures, and quoting.")'''
 
 op.add_option("--m","--model",dest='model_type',
               help="designate which model to use",action='store',type='string')
@@ -76,21 +54,18 @@ op.add_option("--m","--model",dest='model_type',
 op.add_option("--r","--report",dest="training_document_info",
               help="report information on the training documents", action="store_true")
 
-
 (opts, args) = op.parse_args()
 if len(args) > 0:
     op.error("this script takes no arguments.")
     sys.exit(1)
 
-'''print(__doc__)
-op.print_help()
-print()'''
-
+# Check for a model type
 if opts.model_type:
     MODEL = opts.model_type
 else:
     MODEL = "Basic"
 
+# Check for report action
 if opts.training_document_info:
     REPORT_TRAINING_DOCS_INFO = opts.training_document_info
 else:
@@ -98,39 +73,50 @@ else:
 
 def main():
     bm = Model(MODEL, REPORT_TRAINING_DOCS_INFO)
-    
+
     if 'NLTK' in MODEL:
+        # For NLTK models, use benchmarkNLTK
         clf = NaiveBayesClassifier
         benchmarkNLTK(clf,bm)
     else:
+        # For other, sklearn models, use crossValidate
+
         sgdClas = linear_model.SGDClassifier(loss='log',penalty='elasticnet')
         #benchmarkSKLearn(sgdClas,bm)
         crossValidate(sgdClas,bm)
 
+        #rfrClas = RandomForestClassifier(n_estimators=10, max_depth=None,
+        #    min_samples_split=1, random_state=0)
+        #crossValidate(rfrClas, bm)
+
+        #svmClas = svm.SVC(kernel='linear')
+        #crossValidate(clas, bm)
+
 class Model:
     
-    def __init__(self,modelType='Basic',trainingDocumentInfo=False):
-        
-        #Establish Core elements of any model
-        tr_ind = self.getSetIndices('train')
-        te_ind = self.getSetIndices('test')
+    def __init__(self,modelType='Basic',outputDocumentInfo=False):
 
+        #Establish Core elements of any model
+        train_idx = self.getSetIndices('train')
+        test_idx = self.getSetIndices('test')
+
+        # Use DataPuller to fetch and validate a dataframe from our database
         dp = DataPuller.DataPuller()
         rawdf = dp.fetchData()
         valList = dp.validate(rawdf,runReport=False)
         df = rawdf.ix[valList]
 
-        self.sqlChecker(df,tr_ind,te_ind)
-        self.train_df = df.ix[tr_ind]
-        self.test_df = df.ix[te_ind]
-
         ## Adds turk ratings to the dataframe
-        self.train_df = self.addTurkRatingData(self.train_df)
-        self.test_df = self.addTurkRatingData(self.test_df)
+        df = self.addTurkRatingData(df)
 
         ## Adds 'content' column to the dataframe
-        self.train_df = self.addContentColumns(self.train_df)
-        self.test_df = self.addContentColumns(self.test_df)
+        df = self.addContentColumns(df)
+
+        # Check that the training and test dataframe indices are still valid
+        # If this fails, run DataPuller.py to create new train and test data
+        self.sqlChecker(df,train_idx,test_idx)
+        self.train_df = df.ix[train_idx]
+        self.test_df = df.ix[test_idx]
 
         ## filters the training dataframe to rows that have 3 or more turk ratings
         filter_len = self.train_df['count_turk_ratings'].map(lambda x: x >= 3)
@@ -143,10 +129,8 @@ class Model:
         articleStrs_tr = self.train_df['content'].tolist()
         articleStrs_te = self.test_df['content'].tolist()
 
-        if trainingDocumentInfo:
+        if outputDocumentInfo:
             self.outputDocumentStats(articleStrs_tr, 'Training')
-
-        if trainingDocumentInfo:
             self.outputDocumentStats(articleStrs_te, 'Testing')
 
         #Put specific model code here:
@@ -182,7 +166,8 @@ class Model:
         self.feature_names = np.asarray(self.CV.get_feature_names())
 
     def buildBasicBigram(self, articleStrs_tr, articleStrs_te):
-        self.CV = CountVectorizer(ngram_range=(2,2), token_pattern=r'\b\w+\b')
+        self.CV = CountVectorizer(ngram_range=(1,2), token_pattern=r'\b\w+\b', stop_words='english',
+                                max_features=500)
         self.X_train = self.CV.fit_transform(articleStrs_tr)
         self.X_test = self.CV.transform(articleStrs_te)
         self.y_train = self.train_df['turk_sensitive_flag'].tolist()
@@ -231,7 +216,7 @@ class Model:
 
         bigram_features = { bigram: False for prob_diff, bigram in
                                 bigrams_maximizing_prob_diff(zip(articleStrs_tr, 
-                                self.train_df['turk_sensitive_flag'].tolist()), 500) }
+                                self.train_df['turk_sensitive_flag'].tolist()), 1000) }
 
         training_features = [ bigramFeatures(doc, bigram_features) for doc in articleStrs_tr ]
         testing_features = [ bigramFeatures(doc, bigram_features) for doc in articleStrs_te ]
@@ -376,10 +361,13 @@ def prepROC(trainedClas,Model):
     print('Please add name of classifier to file name')
 
 def crossValidate(clf,Model):
-    scores = cross_validation.cross_val_score(clf, Model.X_train, np.array(Model.y_train), cv=10, scoring='f1')
+    print("Cross Validation: [Model Type: "+ MODEL+ "]")
+    scores = cross_validation.cross_val_score(clf, Model.X_train, np.array(Model.y_train), 
+                                        cv=10, scoring='f1')
     print('\n')
     print("F1 Score: %0.2f (+/- %0.2f)" % (scores.mean(), scores.std() * 2))
     print('\n')
+
 
 def benchmarkSKLearn(clf,Model):
     print('_' * 80)
