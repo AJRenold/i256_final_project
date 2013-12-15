@@ -21,6 +21,7 @@ from optparse import OptionParser
 from cPickle import load,dump
 from sklearn import linear_model
 from sklearn import svm
+from sklearn.naive_bayes import BernoulliNB
 from sklearn.ensemble import RandomForestClassifier
 
 
@@ -33,6 +34,7 @@ from sklearn.feature_extraction.text import CountVectorizer,TfidfVectorizer
 from nltk import (
         FreqDist,
         NaiveBayesClassifier,
+        DecisionTreeClassifier,
         classify,
         word_tokenize,
         bigrams,
@@ -76,24 +78,20 @@ def main():
 
     if 'NLTK' in MODEL:
         # For NLTK models, use benchmarkNLTK
+        #clf = DecisionTreeClassifier
         clf = NaiveBayesClassifier
         benchmarkNLTK(clf,bm)
     else:
-        # For other, sklearn models, use crossValidate
-
         sgdClas = linear_model.SGDClassifier(loss='log',penalty='elasticnet')
-        #benchmarkSKLearn(sgdClas,bm)
-        crossValidate(sgdClas,bm)
+        benchmarkSKLearn(sgdClas,bm)
+        #crossValidate(sgdClas,bm)
 
-        #rfrClas = RandomForestClassifier(n_estimators=10, max_depth=None,
-        #    min_samples_split=1, random_state=0)
-        #crossValidate(rfrClas, bm)
-
-        #svmClas = svm.SVC(kernel='linear')
+        #svmClas = svm.SVC(kernel='rbf')
+        #benchmarkSKLearn(svmClas, bm)
         #crossValidate(clas, bm)
 
 class Model:
-    
+
     def __init__(self,modelType='Basic',outputDocumentInfo=False):
 
         #Establish Core elements of any model
@@ -153,6 +151,10 @@ class Model:
         if modelType == "NLTKBigram":
             self.modelType = "NLTKBigram"
             self.buildNLTKBigramFeatures(articleStrs_tr, articleStrs_te)
+            
+        if modelType == "NLTKBigramUnigramCombo":
+            self.modelType = "NLTKBigramUnigramCombo"
+            self.buildNLTKComboFeatures(articleStrs_tr, articleStrs_te)
 
     def buildBasic(self,articleStrs_tr,articleStrs_te):
         self.CV = CountVectorizer(stop_words='english')
@@ -167,7 +169,7 @@ class Model:
 
     def buildBasicBigram(self, articleStrs_tr, articleStrs_te):
         self.CV = CountVectorizer(ngram_range=(1,2), token_pattern=r'\b\w+\b', stop_words='english',
-                                max_features=500)
+                                )
         self.X_train = self.CV.fit_transform(articleStrs_tr)
         self.X_test = self.CV.transform(articleStrs_te)
         self.y_train = self.train_df['turk_sensitive_flag'].tolist()
@@ -220,6 +222,44 @@ class Model:
 
         training_features = [ bigramFeatures(doc, bigram_features) for doc in articleStrs_tr ]
         testing_features = [ bigramFeatures(doc, bigram_features) for doc in articleStrs_te ]
+
+        self.training_set = zip(training_features, self.train_df['turk_sensitive_flag'].tolist())
+        self.test_set = zip(testing_features, self.test_df['turk_sensitive_flag'].tolist() )
+
+    def buildNLTKComboFeatures(self, articleStrs_tr, articleStrs_te):
+
+        def bigramFeatures(doc, feature_set):
+            features = copy(feature_set)
+            words = [w.lower() for w in word_tokenize(doc) if w not in string.punctuation]
+            for bigram in bigrams(words):
+                if bigram in feature_set:
+                    features[bigram] = True
+
+            return features
+
+        def wordFeatures(doc):
+            features = {}
+            for word in re.sub('\W',' ',doc).lower().split(' '):
+                features[word] = True
+
+            return features
+
+        bigram_features = { bigram: False for prob_diff, bigram in
+                                bigrams_maximizing_prob_diff(zip(articleStrs_tr, 
+                                self.train_df['turk_sensitive_flag'].tolist()), 1000) }
+
+        def createFeatureList(docs):
+            feature_list = []
+            for doc in docs:
+                feat = {}
+                feat.update(wordFeatures(doc))
+                feat.update(bigramFeatures(doc, bigram_features))
+                feature_list.append(feat)
+
+            return feature_list
+
+        training_features = createFeatureList(articleStrs_tr)
+        testing_features = createFeatureList(articleStrs_te)
 
         self.training_set = zip(training_features, self.train_df['turk_sensitive_flag'].tolist())
         self.test_set = zip(testing_features, self.test_df['turk_sensitive_flag'].tolist() )
@@ -357,7 +397,7 @@ def benchmarkNLTK(classifier,Model):
     
 def prepROC(trainedClas,Model):
     df_probs = pd.DataFrame(trainedClas.predict_proba(Model.X_test))
-    df_probs.to_csv('pd_'+bm.modelType+'_proba'+'.csv')
+    df_probs.to_csv('pd_'+MODEL+'_proba'+'.csv')
     print('Please add name of classifier to file name')
 
 def crossValidate(clf,Model):
@@ -378,6 +418,8 @@ def benchmarkSKLearn(clf,Model):
     clf.fit(Model.X_train, Model.y_train)
     train_time = time.time() - t0
     print("train time: %0.3fs" % train_time)
+
+    prepROC(clf, Model)
 
     t0 = time.time()
     pred = clf.predict(Model.X_test)
