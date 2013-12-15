@@ -40,7 +40,7 @@ def fetchTweets(iterator):
     return tweets
 
 def storeTweets(tweets):
-    with open('tweets141120132100.json', 'w') as outfile:
+    with open('tweets181120131000.json', 'w') as outfile:
         json.dump(tweets, outfile, indent=2)
 
 iterator = getTwitterIterator()
