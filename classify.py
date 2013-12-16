@@ -1,7 +1,5 @@
 #!/usr/bin/python
 
-#File: classify.py
-
 from collections import defaultdict
 from copy import copy
 import os
@@ -78,7 +76,9 @@ def main():
 
     if 'NLTK' in MODEL:
         # For NLTK models, use benchmarkNLTK
-        #clf = DecisionTreeClassifier
+        clf = DecisionTreeClassifier
+        benchmarkNLTK(clf, bm)
+
         clf = NaiveBayesClassifier
         benchmarkNLTK(clf,bm)
     else:
@@ -86,8 +86,8 @@ def main():
         benchmarkSKLearn(sgdClas,bm)
         #crossValidate(sgdClas,bm)
 
-        #svmClas = svm.SVC(kernel='rbf')
-        #benchmarkSKLearn(svmClas, bm)
+        svmClas = svm.SVC(kernel='rbf')
+        benchmarkSKLearn(svmClas, bm)
         #crossValidate(clas, bm)
 
 class Model:
@@ -127,11 +127,12 @@ class Model:
         articleStrs_tr = self.train_df['content'].tolist()
         articleStrs_te = self.test_df['content'].tolist()
 
+        ## output corpus info if --r or --report
         if outputDocumentInfo:
             self.outputDocumentStats(articleStrs_tr, 'Training')
             self.outputDocumentStats(articleStrs_te, 'Testing')
 
-        #Put specific model code here:
+        # Create the model features based on the --m or --model argument
         if modelType == 'Basic':
             self.modelType = 'Basic'
             self.buildBasic(articleStrs_tr,articleStrs_te)
@@ -151,12 +152,16 @@ class Model:
         if modelType == "NLTKBigram":
             self.modelType = "NLTKBigram"
             self.buildNLTKBigramFeatures(articleStrs_tr, articleStrs_te)
-            
+
         if modelType == "NLTKBigramUnigramCombo":
             self.modelType = "NLTKBigramUnigramCombo"
             self.buildNLTKComboFeatures(articleStrs_tr, articleStrs_te)
 
     def buildBasic(self,articleStrs_tr,articleStrs_te):
+        """
+            Builds basic unigram features for sklearn classifiers
+            Sets class attributes for Model use
+        """
         self.CV = CountVectorizer(stop_words='english')
         self.X_train = self.CV.fit_transform(articleStrs_tr)
         self.X_test = self.CV.transform(articleStrs_te)
@@ -168,6 +173,12 @@ class Model:
         self.feature_names = np.asarray(self.CV.get_feature_names())
 
     def buildBasicBigram(self, articleStrs_tr, articleStrs_te):
+        """
+            Builds basic bigram features for sklearn classifiers
+            Also can do combined unigram and bigram features if
+            ngram_range is set to 1,2
+            Sets class attributes for Model use
+        """
         self.CV = CountVectorizer(ngram_range=(1,2), token_pattern=r'\b\w+\b', stop_words='english',
                                 )
         self.X_train = self.CV.fit_transform(articleStrs_tr)
@@ -180,6 +191,10 @@ class Model:
         self.feature_names = np.asarray(self.CV.get_feature_names())
 
     def buildInvDoc(self,articleStrs_tr,articleStrs_te):
+        """
+            Builds features using TfidfVectorizer for sklearn classifiers
+            Sets class attributes for Model use
+        """
         self.TFV = TfidfVectorizer()
         self.X_train = self.TFV.fit_transform(articleStrs_tr)
         self.X_test = self.TFV.transform(articleStrs_te)
@@ -191,7 +206,10 @@ class Model:
         self.feature_names = np.asarray(self.TFV.get_feature_names())
 
     def buildNLTKSingleWordFeatures(self, articleStrs_tr, articleStrs_te):
-        
+        """
+            Builds unigram features for use with NLTK classifiers
+            Sets class attributes for Model use
+        """
         def wordFeatures(doc):
             features = {}
             for word in re.sub('\W',' ',doc).lower().split(' '):
@@ -206,6 +224,10 @@ class Model:
         self.test_set = zip(testing_features, self.test_df['turk_sensitive_flag'].tolist() )
     
     def buildNLTKBigramFeatures(self, articleStrs_tr, articleStrs_te):
+        """
+            Builds bigram features for use with NLTK classifiers
+            Sets class attributes for Model use
+        """
 
         def bigramFeatures(doc, feature_set):
             features = copy(feature_set)
@@ -227,6 +249,10 @@ class Model:
         self.test_set = zip(testing_features, self.test_df['turk_sensitive_flag'].tolist() )
 
     def buildNLTKComboFeatures(self, articleStrs_tr, articleStrs_te):
+        """
+            Builds unigram and bigram features for NLTK classifiers
+            Sets class attributes for Model use
+        """
 
         def bigramFeatures(doc, feature_set):
             features = copy(feature_set)
@@ -265,6 +291,10 @@ class Model:
         self.test_set = zip(testing_features, self.test_df['turk_sensitive_flag'].tolist() )
 
     def addContentColumns(self, df):
+        """
+            Adds content and content_len columns
+            to dataframe based on parser_content column
+        """
 
         def getText(parser_content):
             soup = BeautifulSoup(parser_content)
@@ -280,7 +310,11 @@ class Model:
         return df
 
     def addTurkRatingData(self, df):
-
+        """
+            Add turker rating columns 'count_turk_ratings',
+            'avg_turk_ratings', and 'turk_sensitive_flag'
+            to dataframe based the turk_rating columns
+        """
         def countTurkRatings(row):
             count = 0
             for i in range(5):
@@ -328,6 +362,12 @@ class Model:
         print('approx. vocabulary size: %d' % len(vocab))
 
     def sqlChecker(self,df,pull_tr,pull_te):
+        """
+            Checks that MySQL data has not been updated
+            If it has, DataPuller.py needs to be run again
+            because the pull_tr and pull_te indices do not
+            match the dataframe
+        """
         valrecs = len(df)
         #print 'valrecs: ' + str(valrecs)
         pickrecs = len(pull_tr) + len(pull_te)
@@ -337,6 +377,10 @@ class Model:
             sys.exit()
     
     def getSetIndices(self,type,getLatest=True,timestamp=''):
+        """
+            From the /data/ directory, finds the most recently
+            created test and training indices
+        """
         if getLatest == True:
             cwd = os.getcwd()
             dirtoWalk = cwd + '/data/' + type
@@ -362,6 +406,9 @@ class Model:
             return indices
 
 def benchmarkNLTK(classifier,Model):
+    """
+        Benchmark nltk classifiers and output report
+    """
     print('_' * 80)
     print("Training: [Model Type: "+ MODEL+ "]")
 
@@ -389,18 +436,21 @@ def benchmarkNLTK(classifier,Model):
     print 'Not Sens recall:', recall(refsets[0], testsets[0])
     print 'Not Sens F-measure:', f_measure(refsets[0], testsets[0])
 
-    #accuracy = classify.accuracy(clf, Model.test_set)
-    #print("nltk classify accuracy:   %0.3f" % accuracy)
-
     print("\n50 most informative features")
     clf.show_most_informative_features(50)
-    
+
 def prepROC(trainedClas,Model):
+    """
+        Prepate a csv data file for the ROC plot
+    """
     df_probs = pd.DataFrame(trainedClas.predict_proba(Model.X_test))
     df_probs.to_csv('pd_'+MODEL+'_proba'+'.csv')
     print('Please add name of classifier to file name')
 
 def crossValidate(clf,Model):
+    """
+        Cross Validation for sklearn classifiers
+    """
     print("Cross Validation: [Model Type: "+ MODEL+ "]")
     scores = cross_validation.cross_val_score(clf, Model.X_train, np.array(Model.y_train), 
                                         cv=10, scoring='f1')
@@ -408,8 +458,10 @@ def crossValidate(clf,Model):
     print("F1 Score: %0.2f (+/- %0.2f)" % (scores.mean(), scores.std() * 2))
     print('\n')
 
-
 def benchmarkSKLearn(clf,Model):
+    """
+        Benchmark sklearn classifiers and output report
+    """
     print('_' * 80)
     
     print("Training: [Model Type: "+ MODEL+ "]")
@@ -418,8 +470,6 @@ def benchmarkSKLearn(clf,Model):
     clf.fit(Model.X_train, Model.y_train)
     train_time = time.time() - t0
     print("train time: %0.3fs" % train_time)
-
-    prepROC(clf, Model)
 
     t0 = time.time()
     pred = clf.predict(Model.X_test)
@@ -432,12 +482,9 @@ def benchmarkSKLearn(clf,Model):
     if hasattr(clf, 'coef_'):
         print("dimensionality: %d" % clf.coef_.shape[1])
         print("density: %f" % density(clf.coef_))
-        
-        #if opts.print_top10 and feature_names is not None:
+
         if Model.feature_names is not None:
             print("Top 10 tokens:")
-            #for i, category in enumerate(categories):
-            #   top10 = np.argsort(clf.coef_[i])[-10:]
             top10 = np.argsort(clf.coef_[0])[-10:]
             print(trim("%s"
                       % (" ".join(Model.feature_names[top10]))))
@@ -451,24 +498,16 @@ def benchmarkSKLearn(clf,Model):
                       % (" ".join(Model.feature_names[top20to30]))))
         print
 
-    #if opts.print_report:
         print("classification report:")
         print(metrics.classification_report(Model.y_test, pred))
-        #                                    target_names=categories))
-    '''
-    if opts.print_cm:
-        print("confusion matrix:")
-        print(metrics.confusion_matrix(y_test, pred))
-    '''
+
     print ""
     clf_descr = str(clf).split('(')[0]
     return clf_descr, score, train_time, test_time
-    
 
 def trim(s):
     """Trim string to fit on terminal (assuming 80-column display)"""
     return s if len(s) <= 80 else s[:77] + "..."
 
-        
 if __name__ == '__main__':
    main()

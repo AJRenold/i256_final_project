@@ -13,7 +13,7 @@ from urllib2 import Request, urlopen, URLError, HTTPError
 
 logging.basicConfig(filename='log_file21112013.log',level=logging.WARNING, format='%(asctime)s %(message)s')
 
-## We should switch from a file to a list of RSS feeds. DONE.
+# Buzzfeed RSS endpoints
 xmlFeeds = ["index","community/justlaunched","animals","celeb","entertainment","food","tech",\
             "lgbt","music","politics","rewind","sports","lol","win","omg","cute","geeky","trashy",\
             "fail","wtf","badge/gold-star","badge/collection","badge/time-waster","ew","lists","nsfw",\
@@ -22,6 +22,7 @@ xmlFeeds = ["index","community/justlaunched","animals","celeb","entertainment","
 
 def main():
 
+    # Get database connection
     try:
         con = mdb.connect('localhost', 'arenold', mysql_pass, 'arenold')
         con.set_character_set('utf8')
@@ -30,15 +31,25 @@ def main():
         logging.warning('Failed to get db con')
         logging.exception(e)
 
+    # New RSS processor instance
     rsp = rssProcessor()
+
+    # each RSS feed 
     for f in xmlFeeds:
         logging.warning('fetching feed ' + f)
+
+        # Process the feed
         outDict = rsp.process(f)
+
+        # Get article status from database
         outDict = rsp.getDatabaseStatus(outDict, con)
+
+        # Crawl articles that are not in the database
         outDict = rsp.addCrawlData(outDict)
+
+        # Update the database with crawled articles
         rsp.updateDatabase(outDict, con)
         logging.warning('finished feed '+ f)
-
 
 class rssProcessor:
 
@@ -48,6 +59,9 @@ class rssProcessor:
         self.parser_api = 'http://www.readability.com/api/content/v1/parser?url={link}&token={token}'
 
     def process(self,xmlFeed):
+        """
+            Process an xml feed, getting the article url and media:rating tags
+        """
         xmlCont = self.fetchFeed(xmlFeed)
         soup = BeautifulSoup(xmlCont,["lxml", "xml"])
         outDict = {}
@@ -62,8 +76,11 @@ class rssProcessor:
             outDict[str(hash(link))] = { 'link': link, 'flag': flag,
                                         'inDB': False, 'id': str(hash(link)) }
         return outDict
-    
+
     def fetchFeed(self,xmlFeed):
+        """
+            fetch the buzzfeed feed
+        """
         url = 'http://www.buzzfeed.com/'+xmlFeed+'.xml'
         req = Request(url)
         try:
@@ -80,6 +97,9 @@ class rssProcessor:
             # everything is fine
 
     def getDatabaseStatus(self, outDict, con):
+        """
+            Checks if articles are in the database
+        """
         with con:
             cur = con.cursor(mdb.cursors.DictCursor)
             for key, value in outDict.iteritems():
@@ -94,6 +114,10 @@ class rssProcessor:
         return outDict
 
     def addCrawlData(self, outDict):
+        """
+            Use the parser api to crawl the visible text from the page
+            Also use reporter to get content from the parse api result
+        """
         reporter = Reporter()
         for key, value in outDict.iteritems():
             if value['inDB'] == False:
@@ -113,6 +137,9 @@ class rssProcessor:
         return outDict
 
     def updateDatabase(self, outDict, con):
+        """
+            Update the database with the crawled articles
+        """
         insert = u"INSERT INTO RSS(id, link, title, parser_content, reporter_content, sensitive_flag) \
                 values('{id}', '{link}', '{title}', '{content}', '{reporter_content}', '{flag}');"
 
@@ -152,8 +179,6 @@ class rssProcessor:
                         logging.exception(e)
 
             con.commit()
-
-
 
     def writeFile(self, outDict, xmlFile):
         ts = time.time()
